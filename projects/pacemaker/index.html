@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pacemaker HA Web Cluster — Ioannis Kapsalis</title>
+<meta name="description" content="Step-by-step guide: a two-node Pacemaker and Corosync cluster on Oracle Linux 9 serving nginx behind a floating IP.">
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="../../assets/nav.css">
+</head>
+<body>
+
+<nav class="site-nav">
+  <div class="site-nav-inner">
+    <a class="site-brand" href="../../">jkapsalis<span>.github.io</span></a>
+    <ul class="site-links">
+      <li><a href="../../">Home</a></li>
+      <li><a href="../../about/">About</a></li>
+      <li><a href="../" aria-current="page">Projects</a></li>
+    </ul>
+  </div>
+</nav>
+
+<header class="page-header">
+  <div class="badge">Project · High Availability</div>
+  <h1>Two-Node Web Cluster<br>with <span>Pacemaker</span></h1>
+  <div class="meta">
+    OS: <span>Oracle Linux 9</span>
+    Stack: <span>Pacemaker 2.1 · Corosync · pcs</span>
+    VIP: <span>192.168.56.200</span>
+  </div>
+</header>
+
+<main>
+
+  <!-- TOPOLOGY -->
+  <div class="topology">
+    <div class="topology-title">Lab topology</div>
+    <div class="topo-row">
+      <div class="node cyan">
+        <div class="node-label">Floating IP</div>
+        <div class="node-main">192.168.56.200</div>
+        <div class="node-sub">follows the active node</div>
+      </div>
+    </div>
+    <div class="topo-row" style="margin:0.5rem 0">
+      <div class="arrow">↕</div>
+    </div>
+    <div class="topo-row">
+      <div class="node blue">
+        <div class="node-label">node1 · active</div>
+        <div class="node-main">192.168.56.107</div>
+        <div class="node-sub">VIP + nginx</div>
+      </div>
+      <div class="arrow side">⇄</div>
+      <div class="node blue">
+        <div class="node-label">node2 · standby</div>
+        <div class="node-main">192.168.56.117</div>
+        <div class="node-sub">takes over on failure</div>
+      </div>
+    </div>
+    <div class="port-note">
+      Corosync heartbeat on <span>UDP 5405</span> over the host-only network · web on <span>TCP 80</span>
+    </div>
+  </div>
+
+  <!-- INTRO -->
+  <div class="card intro">
+    <div class="card-head">Introduction — What and why</div>
+    <div class="card-body">
+      <p>
+        <strong>Corosync</strong> keeps the cluster nodes in contact and decides who is a member.
+        <strong>Pacemaker</strong> runs on top of it and decides where each service runs, moving it
+        when a node fails. <strong>pcs</strong> is the command-line tool that configures both.
+      </p>
+      <p><strong>Project objective</strong></p>
+      <p>Build a two-node cluster where a website stays reachable on one IP address even when a node goes down:</p>
+      <ul class="checklist">
+        <li>A floating IP that always lives on the active node</li>
+        <li>nginx started and stopped by Pacemaker, not by systemd</li>
+        <li>Automatic failover to node2 when node1 stops</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- STEP 0 -->
+  <div class="section-header">
+    <div class="step-num cyan">0</div>
+    <h2>Name resolution</h2>
+  </div>
+
+  <div class="card">
+    <div class="card-head">0a — /etc/hosts <span class="tag tag-amber">Both nodes</span></div>
+    <div class="card-body">
+      <p>Each VirtualBox VM has two adapters: NAT (<code>enp0s3</code>, always <code>10.0.2.15</code>) and host-only (<code>enp0s8</code>, <code>192.168.56.x</code>). The cluster must only use the host-only addresses:</p>
+      <pre><span class="file">/etc/hosts</span>
+<span class="val">192.168.56.107</span> node1
+<span class="val">192.168.56.117</span> node2</pre>
+      <div class="callout warn">
+        <div class="callout-icon">⚠</div>
+        <div>Never map a node name to <code>10.0.2.15</code>. Every VM has that same NAT address, so Corosync on each node ends up talking to itself. See problem 2 below.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- STEP 1 -->
+  <div class="section-header">
+    <div class="step-num">1</div>
+    <h2>Install the cluster stack</h2>
+  </div>
+
+  <div class="card">
+    <div class="card-head">1a — Packages, pcsd and firewall <span class="tag tag-amber">Both nodes</span></div>
+    <div class="card-body">
+      <pre><span class="cmd">dnf install -y pacemaker corosync pcs fence-agents-all resource-agents</span>
+
+<span class="comment"># pcsd is the daemon pcs uses to talk to the other node</span>
+<span class="cmd">systemctl enable --now pcsd</span>
+
+<span class="comment"># The cluster admin user exists but has no password. Use the SAME one on both nodes</span>
+<span class="cmd">passwd hacluster</span>
+
+<span class="comment"># Open the Corosync, pcsd and Pacemaker ports</span>
+<span class="cmd">firewall-cmd --add-service=high-availability --permanent</span>
+<span class="cmd">firewall-cmd --reload</span></pre>
+    </div>
+  </div>
+
+  <!-- STEP 2 -->
+  <div class="section-header">
+    <div class="step-num">2</div>
+    <h2>Create the cluster</h2>
+  </div>
+
+  <div class="card">
+    <div class="card-head">2a — Authenticate and set up <span class="tag tag-blue">node1</span></div>
+    <div class="card-body">
+      <pre><span class="cmd">pcs host auth node1 node2 -u hacluster</span>
+<span class="ok">node1: Authorized
+node2: Authorized</span>
+
+<span class="cmd">pcs cluster setup my_cluster node1 node2</span>
+<span class="ok">Sending 'corosync authkey', 'pacemaker authkey' to 'node1', 'node2'
+Sending 'corosync.conf' to 'node1', 'node2'
+Cluster has been successfully set up.</span>
+
+<span class="cmd">pcs cluster start --all</span>
+<span class="cmd">pcs cluster enable --all</span>   <span class="comment"># start the cluster on boot</span></pre>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head">2b — Final corosync.conf <span class="tag tag-amber">Both nodes</span></div>
+    <div class="card-body">
+      <p><code>pcs</code> writes <code>ring0_addr: node1</code> by default. I changed it to the host-only IPs so Corosync can never pick the NAT address:</p>
+      <pre><span class="kw">totem</span> {
+    <span class="kw">cluster_name</span>: <span class="val">my_cluster</span>
+    <span class="kw">transport</span>: <span class="val">knet</span>
+    <span class="kw">crypto_cipher</span>: <span class="val">aes256</span>
+    <span class="kw">crypto_hash</span>: <span class="val">sha256</span>
+}
+
+<span class="kw">nodelist</span> {
+    <span class="kw">node</span> { <span class="kw">ring0_addr</span>: <span class="val">192.168.56.107</span>  <span class="kw">name</span>: node1  <span class="kw">nodeid</span>: 1 }
+    <span class="kw">node</span> { <span class="kw">ring0_addr</span>: <span class="val">192.168.56.117</span>  <span class="kw">name</span>: node2  <span class="kw">nodeid</span>: 2 }
+}
+
+<span class="kw">quorum</span> {
+    <span class="kw">provider</span>: <span class="val">corosync_votequorum</span>
+    <span class="kw">two_node</span>: <span class="val">1</span>     <span class="comment"># a 2-node cluster keeps quorum with one node left</span>
+}</pre>
+      <pre><span class="comment"># Copy it to node2, then restart the cluster</span>
+<span class="cmd">scp /etc/corosync/corosync.conf node2:/etc/corosync/corosync.conf</span>
+<span class="cmd">pcs cluster stop --all &amp;&amp; pcs cluster start --all</span></pre>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head">2c — Lab properties <span class="tag tag-blue">node1</span></div>
+    <div class="card-body">
+      <pre><span class="cmd">pcs property set stonith-enabled=false</span>
+<span class="cmd">pcs property set no-quorum-policy=ignore</span></pre>
+      <div class="callout warn">
+        <div class="callout-icon">⚠</div>
+        <div><strong>Lab only.</strong> STONITH (fencing) powers off a node that stops responding, so two nodes never run the same service at once. Without a fence device Pacemaker refuses to start resources, so this lab turns it off. A production cluster needs fencing.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- STEP 3 -->
+  <div class="section-header">
+    <div class="step-num">3</div>
+    <h2>Prepare nginx</h2>
+  </div>
+
+  <div class="card">
+    <div class="card-head">3a — Install, but let Pacemaker run it <span class="tag tag-amber">Both nodes</span></div>
+    <div class="card-body">
+      <pre><span class="cmd">dnf install -y nginx</span>
+
+<span class="comment"># A page that shows which node answered</span>
+<span class="cmd">echo "&lt;h1&gt;Served from $(hostname)&lt;/h1&gt;" &gt; /usr/share/nginx/html/index.html</span>
+
+<span class="comment"># Pacemaker starts nginx, so systemd must not</span>
+<span class="cmd">systemctl disable --now nginx</span>
+
+<span class="cmd">firewall-cmd --add-service=http --permanent</span>
+<span class="cmd">firewall-cmd --reload</span></pre>
+      <p>Listen on all addresses so nginx answers on the floating IP, and expose a status page for local checks:</p>
+      <pre><span class="file">/etc/nginx/conf.d/status.conf</span>
+<span class="kw">server</span> {
+    <span class="kw">listen</span> <span class="val">0.0.0.0:80</span>;
+    <span class="kw">server_name</span> <span class="val">localhost</span>;
+
+    <span class="kw">location</span> /nginx-status {
+        <span class="kw">stub_status</span> on;
+        <span class="kw">allow</span> 127.0.0.1;
+        <span class="kw">deny</span> all;
+    }
+
+    <span class="kw">location</span> / {
+        <span class="kw">root</span> <span class="file">/usr/share/nginx/html</span>;
+        <span class="kw">index</span> index.html;
+    }
+}</pre>
+      <pre><span class="cmd">nginx -t</span>
+<span class="ok">nginx: configuration file /etc/nginx/nginx.conf test is successful</span></pre>
+    </div>
+  </div>
+
+  <!-- STEP 4 -->
+  <div class="section-header">
+    <div class="step-num">4</div>
+    <h2>Create the cluster resources</h2>
+  </div>
+
+  <div class="card">
+    <div class="card-head">4a — Floating IP + web server as one group <span class="tag tag-blue">node1</span></div>
+    <div class="card-body">
+      <pre><span class="comment"># The floating IP</span>
+<span class="cmd">pcs resource create VIP ocf:heartbeat:IPaddr2 \
+    ip=192.168.56.200 cidr_netmask=24 \
+    op monitor interval=10s</span>
+
+<span class="comment"># nginx, driven through its systemd unit</span>
+<span class="cmd">pcs resource create WebServer systemd:nginx \
+    op monitor interval=20s \
+    op start timeout=40s \
+    op stop timeout=60s</span>
+
+<span class="comment"># A group starts in order (VIP, then nginx) and always stays on one node</span>
+<span class="cmd">pcs resource group add WebGroup VIP WebServer</span>
+
+<span class="comment"># Prefer node1 when both nodes are healthy</span>
+<span class="cmd">pcs constraint location WebGroup prefers node1=50</span></pre>
+      <pre><span class="cmd">pcs status</span>
+Node List:
+  * Online: [ node1 node2 ]
+
+Full List of Resources:
+  * Resource Group: WebGroup:
+    * VIP       (ocf:heartbeat:IPaddr2):   <span class="ok">Started node1</span>
+    * WebServer (systemd:nginx):           <span class="ok">Started node1</span></pre>
+    </div>
+  </div>
+
+  <!-- STEP 5 -->
+  <div class="section-header">
+    <div class="step-num cyan">5</div>
+    <h2>Test failover</h2>
+  </div>
+
+  <div class="card">
+    <div class="card-head">5a — Stop the active node</div>
+    <div class="card-body">
+      <pre><span class="cmd">curl http://192.168.56.200</span>
+<span class="ok">&lt;h1&gt;Served from node1&lt;/h1&gt;</span>
+
+<span class="comment"># Take node1 out of the cluster</span>
+<span class="cmd">pcs cluster stop node1</span>
+
+<span class="comment"># From node2 or the host: the group moves and the same IP keeps answering</span>
+<span class="cmd">pcs status</span>             <span class="comment"># expected: VIP and WebServer Started node2</span>
+<span class="cmd">curl http://192.168.56.200</span>   <span class="comment"># expected: Served from node2</span>
+
+<span class="comment"># Bring node1 back</span>
+<span class="cmd">pcs cluster start node1</span></pre>
+      <div class="callout info">
+        <div class="callout-icon">ℹ</div>
+        <div>
+          When node1 came back, the group moved back to node1 because of <code>prefers node1=50</code>.
+          To keep it on node2 and avoid a second move, make resources "sticky" with a score higher than the
+          preference: <code>pcs resource defaults update resource-stickiness=100</code>.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PROBLEMS -->
+  <div class="section-header">
+    <div class="step-num" style="background:var(--red)">!</div>
+    <h2>Problems I hit and how I fixed them</h2>
+  </div>
+
+  <div class="card">
+    <div class="card-head">1 — pcs host auth: "Username and/or password is incorrect"</div>
+    <div class="card-body">
+      <p><strong>Cause:</strong> the <code>hacluster</code> user has no password after install.</p>
+      <pre><span class="comment"># On BOTH nodes, with the same password</span>
+<span class="cmd">passwd hacluster</span>
+<span class="cmd">pcs host auth node1 node2 -u hacluster</span></pre>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head">2 — node2 OFFLINE, "partition WITHOUT quorum"</div>
+    <div class="card-body">
+      <p><strong>Cause:</strong> <code>/etc/hosts</code> also mapped node names to the NAT address <code>10.0.2.15</code>, which every VM shares. Corosync resolved the names to the wrong network.</p>
+      <pre><span class="comment"># What does the name really resolve to?</span>
+<span class="cmd">getent hosts node1 node2</span>
+
+<span class="comment"># Is heartbeat traffic arriving on the host-only adapter?</span>
+<span class="cmd">tcpdump -i enp0s8 port 5405 -n</span></pre>
+      <p><strong>Fix:</strong> remove the <code>10.0.2.15</code> lines from <code>/etc/hosts</code> and set <code>ring0_addr</code> to the host-only IPs (step 2b).</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head">3 — "nsscrypto: Digest does not match"</div>
+    <div class="card-body">
+      <pre><span class="err">[KNET  ] nsscrypto: Digest does not match. Check crypto key and configuration.
+[KNET  ] rx: Unable to decrypt packet from 192.168.56.117:5405 (size 80)!</span></pre>
+      <p><strong>Cause:</strong> the two nodes had different <code>/etc/corosync/authkey</code> files, so they could not decrypt each other's traffic.</p>
+      <pre><span class="comment"># Compare on both nodes; the hashes must match</span>
+<span class="cmd">md5sum /etc/corosync/authkey</span>
+
+<span class="comment"># Copy node1's key to node2, then restart both services</span>
+<span class="cmd">scp /etc/corosync/authkey root@192.168.56.117:/etc/corosync/authkey</span>
+<span class="cmd">systemctl restart corosync pacemaker</span>
+<span class="ok">Online: [ node1 node2 ]   — partition with quorum</span></pre>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head">4 — WebServer "not installed" with ocf:heartbeat:nginx</div>
+    <div class="card-body">
+      <pre><span class="err">* WebServer start on node1 returned 'not installed'
+* WebServer start on node2 returned 'not installed'</span></pre>
+      <p>
+        The <code>ocf:heartbeat:nginx</code> agent kept failing. It still failed after I removed Apache (<code>httpd</code>)
+        and pointed it at <code>/usr/sbin/nginx</code>. I didn't find the root cause.
+      </p>
+      <p><strong>Fix:</strong> let Pacemaker drive nginx's own systemd unit instead:</p>
+      <pre><span class="cmd">pcs resource delete WebServer</span>
+<span class="cmd">pcs resource create WebServer systemd:nginx op monitor interval=20s</span>
+<span class="cmd">pcs resource group add WebGroup WebServer</span>
+<span class="cmd">pcs resource cleanup</span>
+<span class="ok">* WebServer (systemd:nginx): Started node1</span></pre>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head">5 — "invalid cluster property option 'default-resource-stickiness'"</div>
+    <div class="card-body">
+      <p><strong>Cause:</strong> stickiness is a resource default, not a cluster property, in current pcs versions.</p>
+      <pre><span class="cmd">pcs resource defaults update resource-stickiness=100</span></pre>
+    </div>
+  </div>
+
+</main>
+
+<footer>
+  <div>Pacemaker HA Web Cluster · <a href="../">← All projects</a></div>
+  <div>Built from my terminal session · 2026-04-09</div>
+</footer>
+
+</body>
+</html>

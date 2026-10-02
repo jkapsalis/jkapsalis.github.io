@@ -460,3 +460,42 @@ footer a { color: var(--blue); text-decoration: none; }
   .node { width: 100%; max-width: 260px; }
   .arrow.side { transform: rotate(90deg); }
 }
+
+/* ── BEFORE / AFTER TABLES ── */
+.chg  { color: var(--amber); font-weight: 600; }
+.new  { color: var(--cyan);  font-weight: 600; }
+.same { color: var(--text-dim); }
+
+td .badge-op {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.65rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: 3px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.op-update { background: rgba(255, 184, 77, 0.12); color: var(--amber); }
+.op-insert { background: rgba(0, 212, 170, 0.12);  color: var(--cyan); }
+.op-none   { background: rgba(107, 116, 144, 0.15); color: var(--text-dim); }
+
+/* ── COLLAPSIBLE ── */
+details {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  margin-bottom: 1.25rem;
+}
+
+summary {
+  cursor: pointer;
+  padding: 0.85rem 1.25rem;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-bright);
+}
+
+summary:hover { color: var(--blue); }
+details[open] summary { border-bottom: 1px solid var(--border); }
+details > .card-body { padding-top: 1rem; }

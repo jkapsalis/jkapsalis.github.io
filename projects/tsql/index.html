@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>T-SQL Attribute Updates — Ioannis Kapsalis</title>
+<meta name="description" content="Two T-SQL tasks on an employee-attribute model, with before and after tables showing exactly what changed.">
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="../../assets/nav.css">
+</head>
+<body>
+
+<nav class="site-nav">
+  <div class="site-nav-inner">
+    <a class="site-brand" href="../../">jkapsalis<span>.github.io</span></a>
+    <ul class="site-links">
+      <li><a href="../../">Home</a></li>
+      <li><a href="../../about/">About</a></li>
+      <li><a href="../" aria-current="page">Projects</a></li>
+    </ul>
+  </div>
+</nav>
+
+<header class="page-header">
+  <div class="badge">Project · T-SQL</div>
+  <h1>Employee Attributes<br>with <span>T-SQL</span></h1>
+  <div class="meta">
+    Engine: <span>SQL Server</span>
+    Tool: <span>SSMS</span>
+    Tasks: <span>2 — cursor &amp; set-based</span>
+  </div>
+</header>
+
+<main>
+
+  <!-- SCHEMA -->
+  <div class="topology">
+    <div class="topology-title">Data model</div>
+    <div class="topo-row">
+      <div class="node blue">
+        <div class="node-label">Table</div>
+        <div class="node-main">Employee</div>
+        <div class="node-sub">EMP_Supervisor → EMP_ID</div>
+      </div>
+      <div class="arrow side">↔</div>
+      <div class="node amber">
+        <div class="node-label">Link table</div>
+        <div class="node-main">EmployeeAttribute</div>
+        <div class="node-sub">PK (employee, attribute)</div>
+      </div>
+      <div class="arrow side">↔</div>
+      <div class="node cyan">
+        <div class="node-label">Table</div>
+        <div class="node-main">Attribute</div>
+        <div class="node-sub">name + value</div>
+      </div>
+    </div>
+    <div class="port-note">
+      Many-to-many: one employee has many attributes · Employee references itself for the <span>supervisor</span>
+    </div>
+  </div>
+
+  <!-- INTRO -->
+  <div class="card intro">
+    <div class="card-head">Introduction — What and why</div>
+    <div class="card-body">
+      <p>
+        The database stores employees and free-form attributes such as <code>Height = Tall</code> or
+        <code>Weight = Heavy</code>. A link table connects them, so each employee can have any number
+        of attributes. <code>EMP_Supervisor</code> points back to another employee, which forms the org chart.
+      </p>
+      <p><strong>The two tasks</strong></p>
+      <ul class="checklist">
+        <li>Task 1: every employee must have Weight = Thin</li>
+        <li>Task 2: every supervisor must have Height = Short</li>
+      </ul>
+      <p>
+        Each task has to <strong>update</strong> the attribute when it exists and <strong>insert</strong> it
+        when it doesn't. The tables below show the data before and after each script.
+      </p>
+    </div>
+  </div>
+
+  <!-- STEP 0 -->
+  <div class="section-header">
+    <div class="step-num cyan">0</div>
+    <h2>Starting data</h2>
+  </div>
+
+  <div class="card">
+    <div class="card-head">0a — Org chart <span class="tag tag-blue">Employee</span></div>
+    <div class="card-body">
+      <pre><span class="val">Greg</span>  <span class="comment">(no supervisor)</span>
+├── <span class="val">Oleg</span>
+│   └── Pete
+├── Paul
+├── Aura
+└── Phil</pre>
+      <p>Supervisors are the employees that someone else reports to: <strong>Greg</strong> and <strong>Oleg</strong>.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head">0b — Attributes before any script <span class="tag tag-amber">7 links</span></div>
+    <div class="card-body">
+      <div class="table-wrap">
+        <table>
+          <tr><th>Employee</th><th>Height</th><th>Weight</th></tr>
+          <tr><td>Greg</td><td>Tall</td><td>Medium</td></tr>
+          <tr><td>Oleg</td><td>Short</td><td>Thin</td></tr>
+          <tr><td>Pete</td><td>Medium</td><td class="same">—</td></tr>
+          <tr><td>Paul</td><td>Short</td><td class="same">—</td></tr>
+          <tr><td>Aura</td><td class="same">—</td><td class="same">—</td></tr>
+          <tr><td>Phil</td><td class="same">—</td><td>Heavy</td></tr>
+        </table>
+      </div>
+      <p>The tables, keys and seed rows are in <code>Creating the Tables and making the Insertions.txt</code>.</p>
+    </div>
+  </div>
+
+  <!-- TASK 1 -->
+  <div class="section-header">
+    <div class="step-num">1</div>
+    <h2>Task 1 — Weight = Thin for everyone</h2>
+  </div>
+
+  <div class="card">
+    <div class="card-head">1a — Cursor, one employee at a time <span class="tag tag-blue">1st_task_SQL_Query.sql</span></div>
+    <div class="card-body">
+      <p>A cursor walks the Employee table. For each row it checks whether a Weight attribute exists, then updates or inserts. Everything runs in one transaction:</p>
+      <pre><span class="kw">BEGIN TRANSACTION</span>;
+<span class="kw">DECLARE</span> emp_cursor <span class="kw">CURSOR FOR SELECT</span> EMP_ID <span class="kw">FROM</span> Employee;
+<span class="kw">OPEN</span> emp_cursor;
+<span class="kw">FETCH NEXT FROM</span> emp_cursor <span class="kw">INTO</span> @EmpID;
+
+<span class="kw">WHILE</span> @@FETCH_STATUS = 0
+<span class="kw">BEGIN</span>
+    <span class="kw">IF EXISTS</span> (<span class="kw">SELECT</span> 1 <span class="kw">FROM</span> EmployeeAttribute ea
+               <span class="kw">JOIN</span> Attribute a <span class="kw">ON</span> ea.EMPATTR_AttributeID = a.ATTR_ID
+               <span class="kw">WHERE</span> ea.EMPATTR_EmployeeID = @EmpID <span class="kw">AND</span> a.ATTR_Name = <span class="val">'Weight'</span>)
+        <span class="comment">-- has a Weight: change its value</span>
+        <span class="kw">UPDATE</span> a <span class="kw">SET</span> a.ATTR_Value = <span class="val">'Thin'</span>
+        <span class="kw">FROM</span> Attribute a <span class="kw">JOIN</span> EmployeeAttribute ea <span class="kw">ON</span> a.ATTR_ID = ea.EMPATTR_AttributeID
+        <span class="kw">WHERE</span> ea.EMPATTR_EmployeeID = @EmpID <span class="kw">AND</span> a.ATTR_Name = <span class="val">'Weight'</span>;
+    <span class="kw">ELSE</span>
+    <span class="kw">BEGIN</span>
+        <span class="comment">-- no Weight: create one and link it</span>
+        <span class="kw">SET</span> @AttrID = <span class="kw">NEWID</span>();
+        <span class="kw">INSERT INTO</span> Attribute <span class="kw">VALUES</span> (@AttrID, <span class="val">'Weight'</span>, <span class="val">'Thin'</span>);
+        <span class="kw">INSERT INTO</span> EmployeeAttribute <span class="kw">VALUES</span> (@EmpID, @AttrID);
+    <span class="kw">END</span>
+    <span class="kw">FETCH NEXT FROM</span> emp_cursor <span class="kw">INTO</span> @EmpID;
+<span class="kw">END</span>
+
+<span class="kw">CLOSE</span> emp_cursor; <span class="kw">DEALLOCATE</span> emp_cursor;
+<span class="kw">COMMIT TRANSACTION</span>;</pre>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head">1b — The difference <span class="tag tag-cyan">before → after</span></div>
+    <div class="card-body">
+      <div class="table-wrap">
+        <table>
+          <tr><th>Employee</th><th>Weight before</th><th>Weight after</th><th>Action</th></tr>
+          <tr><td>Greg</td><td>Medium</td><td class="chg">Thin</td><td><span class="badge-op op-update">update</span></td></tr>
+          <tr><td>Oleg</td><td>Thin</td><td class="same">Thin</td><td><span class="badge-op op-none">already Thin</span></td></tr>
+          <tr><td>Pete</td><td class="same">—</td><td class="new">Thin</td><td><span class="badge-op op-insert">insert</span></td></tr>
+          <tr><td>Paul</td><td class="same">—</td><td class="new">Thin</td><td><span class="badge-op op-insert">insert</span></td></tr>
+          <tr><td>Aura</td><td class="same">—</td><td class="new">Thin</td><td><span class="badge-op op-insert">insert</span></td></tr>
+          <tr><td>Phil</td><td>Heavy</td><td class="chg">Thin</td><td><span class="badge-op op-update">update</span></td></tr>
+        </table>
+      </div>
+      <p><strong>Result:</strong> 2 values changed, 3 new attributes. Attribute rows went from <code>7</code> to <code>10</code>, link rows from <code>7</code> to <code>10</code>.</p>
+    </div>
+  </div>
+
+  <!-- TASK 2 -->
+  <div class="section-header">
+    <div class="step-num">2</div>
+    <h2>Task 2 — Height = Short for supervisors</h2>
+  </div>
+
+  <div class="card">
+    <div class="card-head">2a — Set-based, all supervisors at once <span class="tag tag-blue">2_task_SQL_QUERY.sql</span></div>
+    <div class="card-body">
+      <p>
+        No loop this time. The script finds (or creates) the <code>Height = Short</code> attribute once,
+        then re-points every supervisor's Height link to it with one <code>UPDATE</code>, and adds it with one
+        <code>INSERT</code> for supervisors that have no Height at all:
+      </p>
+      <pre><span class="comment">-- Find the existing 'Height = Short' attribute, or create it</span>
+<span class="kw">SELECT</span> @HeightAttrID = ATTR_ID <span class="kw">FROM</span> Attribute
+<span class="kw">WHERE</span> ATTR_Name = <span class="val">'Height'</span> <span class="kw">AND</span> ATTR_Value = <span class="val">'Short'</span>;
+<span class="kw">IF</span> @HeightAttrID <span class="kw">IS NULL</span> ... <span class="kw">INSERT INTO</span> Attribute ...
+
+<span class="kw">BEGIN TRANSACTION</span>;
+
+<span class="comment">-- Supervisors that already have a Height: link them to 'Short'</span>
+<span class="kw">UPDATE</span> EmployeeAttribute <span class="kw">SET</span> EMPATTR_AttributeID = @HeightAttrID
+<span class="kw">WHERE</span> EMPATTR_EmployeeID <span class="kw">IN</span> (<span class="kw">SELECT DISTINCT</span> EMP_Supervisor <span class="kw">FROM</span> Employee
+                             <span class="kw">WHERE</span> EMP_Supervisor <span class="kw">IS NOT NULL</span>)
+  <span class="kw">AND</span> EMPATTR_AttributeID <span class="kw">IN</span> (<span class="kw">SELECT</span> ATTR_ID <span class="kw">FROM</span> Attribute <span class="kw">WHERE</span> ATTR_Name = <span class="val">'Height'</span>);
+
+<span class="comment">-- Supervisors with no Height at all: add the link</span>
+<span class="kw">INSERT INTO</span> EmployeeAttribute (EMPATTR_EmployeeID, EMPATTR_AttributeID)
+<span class="kw">SELECT DISTINCT</span> e.EMP_ID, @HeightAttrID <span class="kw">FROM</span> Employee e
+<span class="kw">WHERE</span> e.EMP_ID <span class="kw">IN</span> (<span class="kw">SELECT</span> EMP_Supervisor <span class="kw">FROM</span> Employee <span class="kw">WHERE</span> EMP_Supervisor <span class="kw">IS NOT NULL</span>)
+  <span class="kw">AND NOT EXISTS</span> (<span class="kw">SELECT</span> 1 <span class="kw">FROM</span> EmployeeAttribute ea
+                  <span class="kw">JOIN</span> Attribute a <span class="kw">ON</span> ea.EMPATTR_AttributeID = a.ATTR_ID
+                  <span class="kw">WHERE</span> ea.EMPATTR_EmployeeID = e.EMP_ID <span class="kw">AND</span> a.ATTR_Name = <span class="val">'Height'</span>);
+
+<span class="kw">COMMIT TRANSACTION</span>;</pre>
+      <pre><span class="ok">(2 rows affected)</span>   <span class="comment">-- UPDATE: Greg and Oleg</span>
+<span class="ok">(0 rows affected)</span>   <span class="comment">-- INSERT: both supervisors already had a Height</span>
+THE supervisors were updated with the new value: Height -> Short.</pre>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head">2b — The difference <span class="tag tag-cyan">before → after</span></div>
+    <div class="card-body">
+      <div class="table-wrap">
+        <table>
+          <tr><th>Employee</th><th>Supervisor?</th><th>Height before</th><th>Height after</th><th>Action</th></tr>
+          <tr><td>Greg</td><td>yes</td><td>Tall</td><td class="chg">Short</td><td><span class="badge-op op-update">update</span></td></tr>
+          <tr><td>Oleg</td><td>yes</td><td>Short</td><td class="same">Short</td><td><span class="badge-op op-update">update, same value</span></td></tr>
+          <tr><td>Pete</td><td class="same">no</td><td>Medium</td><td class="same">Medium</td><td><span class="badge-op op-none">skipped</span></td></tr>
+          <tr><td>Paul</td><td class="same">no</td><td>Short</td><td class="same">Short</td><td><span class="badge-op op-none">skipped</span></td></tr>
+          <tr><td>Aura</td><td class="same">no</td><td class="same">—</td><td class="same">—</td><td><span class="badge-op op-none">skipped</span></td></tr>
+          <tr><td>Phil</td><td class="same">no</td><td class="same">—</td><td class="same">—</td><td><span class="badge-op op-none">skipped</span></td></tr>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- FINAL STATE -->
+  <div class="section-header">
+    <div class="step-num cyan">✓</div>
+    <h2>Final state</h2>
+  </div>
+
+  <div class="card">
+    <div class="card-head">After both scripts <span class="tag tag-cyan">10 links</span></div>
+    <div class="card-body">
+      <div class="table-wrap">
+        <table>
+          <tr><th>Employee</th><th>Height</th><th>Weight</th></tr>
+          <tr><td>Greg</td><td><span class="same">Tall →</span> <span class="chg">Short</span></td><td><span class="same">Medium →</span> <span class="chg">Thin</span></td></tr>
+          <tr><td>Oleg</td><td>Short</td><td>Thin</td></tr>
+          <tr><td>Pete</td><td>Medium</td><td class="new">Thin</td></tr>
+          <tr><td>Paul</td><td>Short</td><td class="new">Thin</td></tr>
+          <tr><td>Aura</td><td class="same">—</td><td class="new">Thin</td></tr>
+          <tr><td>Phil</td><td class="same">—</td><td><span class="same">Heavy →</span> <span class="chg">Thin</span></td></tr>
+        </table>
+      </div>
+      <p><span class="chg">Amber</span> = changed value · <span class="new">cyan</span> = new attribute. I checked these results against the SSMS output after running both scripts.</p>
+    </div>
+  </div>
+
+  <!-- CURSOR VS SET -->
+  <div class="section-header">
+    <div class="step-num amber">≠</div>
+    <h2>Cursor vs set-based</h2>
+  </div>
+
+  <div class="card">
+    <div class="card-head">The difference between the two approaches</div>
+    <div class="card-body">
+      <div class="table-wrap">
+        <table>
+          <tr><th></th><th>Task 1 — cursor</th><th>Task 2 — set-based</th></tr>
+          <tr><td>Works on</td><td>One employee per loop</td><td>All supervisors in one statement</td></tr>
+          <tr><td>Decision</td><td><code>IF EXISTS</code> per row</td><td><code>WHERE ... IN</code> and <code>NOT EXISTS</code></td></tr>
+          <tr><td>Statements run</td><td>Grows with the number of employees</td><td>Fixed: one UPDATE + one INSERT</td></tr>
+          <tr><td>Easy to read</td><td>Yes, step by step</td><td>Yes, once you read it as sets</td></tr>
+          <tr><td>Scales to big tables</td><td>Poorly</td><td>Well</td></tr>
+        </table>
+      </div>
+      <div class="callout info">
+        <div class="callout-icon">ℹ</div>
+        <div>
+          Task 1 changes the Attribute row itself. That is safe here because each attribute row belongs to one
+          employee. If several employees shared one <code>Weight = Medium</code> row, updating it would change all of them.
+          Task 2 avoids this by re-linking employees to a <code>Height = Short</code> row instead of editing values.
+        </div>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<footer>
+  <div>T-SQL Attribute Updates · <a href="../">← All projects</a></div>
+  <div><a href="https://github.com/jkapsalis/T-sql-project">Source on GitHub ↗</a></div>
+</footer>
+
+</body>
+</html>

@@ -12,7 +12,9 @@ about/                      About me
 projects/                   Project list
 projects/saltstack/         SaltStack master & minions
 projects/elk-stack/         ELK Stack + Filebeat on Docker
-projects/vault-pki/         Vault PKI Interface Manager
+projects/vault-pki/         Vault PKI Interface Manager (+ the script)
+projects/pacemaker/         Pacemaker HA web cluster
+projects/tsql/              T-SQL attribute updates
 assets/                     Shared CSS
 ```
 

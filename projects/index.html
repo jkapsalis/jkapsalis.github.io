@@ -22,7 +22,7 @@
 </nav>
 
 <header class="page-header">
-  <div class="badge">Projects · 3 guides</div>
+  <div class="badge">Projects · 5 guides</div>
   <h1>Infrastructure <span>labs</span></h1>
   <p class="lead">Each project is a full walkthrough: topology, commands, configuration and troubleshooting.</p>
 </header>
@@ -74,8 +74,8 @@
       <div class="kicker">PKI &amp; security</div>
       <h3><a href="vault-pki/">Vault PKI Interface Manager</a></h3>
       <p>
-        A local certificate authority on HashiCorp Vault. A PowerShell menu starts Vault in Docker,
-        sets up the PKI engine, and issues, revokes and exports certificates.
+        One PowerShell script runs a local certificate authority on HashiCorp Vault. It starts Vault
+        in Docker, builds the CA, and issues, revokes and exports certificates from a menu.
       </p>
       <ul class="stack">
         <li>HashiCorp Vault</li>
@@ -85,6 +85,44 @@
       </ul>
       <div class="links">
         <a href="vault-pki/">Read guide →</a>
+        <a href="https://github.com/jkapsalis/Vault_setup_automation">Source ↗</a>
+      </div>
+    </article>
+
+    <article class="project" style="--accent: var(--red)">
+      <div class="kicker">High availability</div>
+      <h3><a href="pacemaker/">Pacemaker HA web cluster</a></h3>
+      <p>
+        Two Oracle Linux nodes share a floating IP. Pacemaker runs nginx on the active node and
+        moves it to the standby when that node fails. Includes the four problems I hit and their fixes.
+      </p>
+      <ul class="stack">
+        <li>Pacemaker</li>
+        <li>Corosync</li>
+        <li>pcs</li>
+        <li>nginx</li>
+        <li>Oracle Linux 9</li>
+      </ul>
+      <div class="links">
+        <a href="pacemaker/">Read guide →</a>
+      </div>
+    </article>
+
+    <article class="project" style="--accent: var(--blue)">
+      <div class="kicker">Databases</div>
+      <h3><a href="tsql/">T-SQL attribute updates</a></h3>
+      <p>
+        Two SQL Server tasks on an employee-attribute model, one with a cursor and one set-based,
+        with before and after tables that show exactly what changed.
+      </p>
+      <ul class="stack">
+        <li>T-SQL</li>
+        <li>SQL Server</li>
+        <li>SSMS</li>
+      </ul>
+      <div class="links">
+        <a href="tsql/">Read guide →</a>
+        <a href="https://github.com/jkapsalis/T-sql-project">Source ↗</a>
       </div>
     </article>
 
