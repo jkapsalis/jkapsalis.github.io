@@ -1,0 +1,60 @@
+/* Site navigation, shared by every page (including the standalone SaltStack guide). */
+
+.site-nav {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: rgba(13, 15, 20, 0.92);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid #252a38;
+}
+
+.site-nav-inner {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 0.85rem 2rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.site-brand {
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 700;
+  font-size: 0.9rem;
+  color: #eef0f8;
+  text-decoration: none;
+}
+
+.site-brand span { color: #00d4aa; }
+
+.site-links {
+  display: flex;
+  gap: 0.25rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.site-links a {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.78rem;
+  color: #6b7490;
+  text-decoration: none;
+  padding: 0.35rem 0.7rem;
+  border-radius: 5px;
+  transition: color 0.15s, background 0.15s;
+}
+
+.site-links a:hover { color: #eef0f8; background: #1a1e2a; }
+
+.site-links a[aria-current="page"] {
+  color: #4a9eff;
+  background: rgba(74, 158, 255, 0.1);
+}
+
+@media (max-width: 560px) {
+  .site-nav-inner { padding: 0.75rem 1rem; }
+}

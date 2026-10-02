@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Vault PKI CA Manager — Ioannis Kapsalis</title>
+<meta name="description" content="Step-by-step guide: a local certificate authority on HashiCorp Vault, managed with a PowerShell menu.">
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="../../assets/nav.css">
+</head>
+<body>
+
+<nav class="site-nav">
+  <div class="site-nav-inner">
+    <a class="site-brand" href="../../">jkapsalis<span>.github.io</span></a>
+    <ul class="site-links">
+      <li><a href="../../">Home</a></li>
+      <li><a href="../../about/">About</a></li>
+      <li><a href="../" aria-current="page">Projects</a></li>
+    </ul>
+  </div>
+</nav>
+
+<header class="page-header">
+  <div class="badge">Project · HashiCorp Vault PKI</div>
+  <h1>Local Certificate Authority<br>with <span>HashiCorp Vault</span></h1>
+  <div class="meta">
+    Host: <span>Windows + Docker Desktop</span>
+    Tooling: <span>PowerShell 5.1 · OpenSSL</span>
+    Vault: <span>dev server :8200</span>
+  </div>
+</header>
+
+<main>
+
+  <!-- TOPOLOGY -->
+  <div class="topology">
+    <div class="topology-title">Certificate flow</div>
+    <div class="topo-row">
+      <div class="node amber">
+        <div class="node-label">Operator</div>
+        <div class="node-main">PowerShell menu</div>
+        <div class="node-sub">key + CSR via OpenSSL</div>
+      </div>
+      <div class="arrow side">→</div>
+      <div class="node blue">
+        <div class="node-label">Docker container</div>
+        <div class="node-main">Vault · pki/</div>
+        <div class="node-sub">root CA + signing role</div>
+      </div>
+      <div class="arrow side">→</div>
+      <div class="node cyan">
+        <div class="node-label">Output</div>
+        <div class="node-main">.crt · chain · .pfx</div>
+        <div class="node-sub">root CA → Windows trust</div>
+      </div>
+    </div>
+    <div class="port-note">
+      API &amp; UI on <span>http://localhost:8200</span> · PKI mount <span>pki/</span> · role <span>dev-role</span>
+    </div>
+  </div>
+
+  <!-- INTRO -->
+  <div class="card intro">
+    <div class="card-head">Introduction — What and why</div>
+    <div class="card-body">
+      <p>
+        Internal services in a development environment still need TLS certificates, but a public CA
+        will not issue certificates for internal hostnames. A private <strong>certificate authority</strong>
+        solves this, and <strong>HashiCorp Vault</strong>'s PKI secrets engine provides one with an API:
+        it signs certificates, keeps track of what it issued, revokes them and publishes a CRL.
+      </p>
+      <p><strong>Project objective</strong></p>
+      <p>Wrap the whole certificate lifecycle in one PowerShell script, so a developer can:</p>
+      <ul class="checklist">
+        <li>Start a local Vault and configure the PKI engine automatically</li>
+        <li>Generate a private key and CSR, then sign it with the local CA</li>
+        <li>List, read and revoke certificates, and view the CRL</li>
+        <li>Export a <code>.pfx</code> bundle and trust the root CA on Windows</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- STEP 0 -->
+  <div class="section-header">
+    <div class="step-num cyan">0</div>
+    <h2>Requirements</h2>
+  </div>
+
+  <div class="card">
+    <div class="card-head">Tools on the Windows host</div>
+    <div class="card-body">
+      <div class="table-wrap">
+        <table>
+          <tr><th>Tool</th><th>Used for</th></tr>
+          <tr><td>Docker Desktop</td><td>Runs the <code>hashicorp/vault</code> container</td></tr>
+          <tr><td>PowerShell 5.1+</td><td>Runs the CA manager script</td></tr>
+          <tr><td>OpenSSL</td><td>Private keys, CSRs and PFX export</td></tr>
+          <tr><td>certutil</td><td>Adds the root CA to the Windows trust store (built in)</td></tr>
+        </table>
+      </div>
+      <p>The script checks for each tool on start and stops with a clear message if one is missing.</p>
+    </div>
+  </div>
+
+  <!-- STEP 1 -->
+  <div class="section-header">
+    <div class="step-num">1</div>
+    <h2>Start Vault in dev mode</h2>
+  </div>
+
+  <div class="card">
+    <div class="card-head">1a — Run the container <span class="tag tag-blue">Docker</span></div>
+    <div class="card-body">
+      <p>The script checks whether a <code>vault</code> container is running, stopped or missing, and only creates it when needed:</p>
+      <pre><span class="cmd">docker run -d \
+  -e "VAULT_DEV_LISTEN_ADDRESS=0.0.0.0:8200" \
+  -p 8200:8200 \
+  --name vault \
+  hashicorp/vault:latest \
+  server -dev</span></pre>
+      <div class="callout warn">
+        <div class="callout-icon">⚠</div>
+        <div>
+          Dev mode starts Vault already unsealed, keeps its data in memory and prints a root token to the logs.
+          It is meant for a lab only. A real CA needs persistent storage, sealing and scoped tokens.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head">1b — Get the root token <span class="tag tag-blue">Docker</span></div>
+    <div class="card-body">
+      <p>The script reads the token from the container logs and validates it with <code>auth/token/lookup-self</code>. By hand:</p>
+      <pre><span class="cmd">docker logs vault | grep "Root Token"</span>
+<span class="ok">Root Token: hvs.XXXXXXXXXXXXXXXXXXXXXXXX</span>
+
+<span class="cmd">export VAULT_ADDR="http://localhost:8200"</span>
+<span class="cmd">export VAULT_TOKEN="hvs.XXXXXXXXXXXXXXXXXXXXXXXX"</span></pre>
+      <div class="callout info">
+        <div class="callout-icon">ℹ</div>
+        <div>Never commit a token to git, even a dev one. Read it from the logs or an environment variable each time.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- STEP 2 -->
+  <div class="section-header">
+    <div class="step-num">2</div>
+    <h2>Configure the PKI engine</h2>
+  </div>
+
+  <div class="card">
+    <div class="card-head">2a — Enable PKI and create the root CA <span class="tag tag-blue">Vault API</span></div>
+    <div class="card-body">
+      <p>These are the API calls the script makes. Each step is skipped if it was already done.</p>
+      <pre><span class="comment"># 1. Mount the PKI secrets engine at pki/</span>
+<span class="cmd">curl -H "X-Vault-Token: $VAULT_TOKEN" -X POST \
+  -d '{"type":"pki"}' \
+  $VAULT_ADDR/v1/sys/mounts/pki</span>
+
+<span class="comment"># 2. Publish where clients find the CA, CRL and OCSP endpoints</span>
+<span class="cmd">curl -H "X-Vault-Token: $VAULT_TOKEN" -X POST \
+  -d '{"issuing_certificates":["http://localhost:8200/v1/pki/ca"],
+       "crl_distribution_points":["http://localhost:8200/v1/pki/crl"],
+       "ocsp_servers":["http://localhost:8200/v1/pki/ocsp"]}' \
+  $VAULT_ADDR/v1/pki/config/urls</span>
+
+<span class="comment"># 3. Generate the root CA (private key never leaves Vault)</span>
+<span class="cmd">curl -H "X-Vault-Token: $VAULT_TOKEN" -X POST \
+  -d '{"common_name":"example.com","issuer_name":"root-ca","ttl":"87600h"}' \
+  $VAULT_ADDR/v1/pki/root/generate/internal</span></pre>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head">2b — Create a signing role <span class="tag tag-blue">Vault API</span></div>
+    <div class="card-body">
+      <p>A <strong>role</strong> limits what the CA will sign: which domains and how long certificates live.</p>
+      <pre><span class="cmd">curl -H "X-Vault-Token: $VAULT_TOKEN" -X POST \
+  -d '{"allowed_domains":"apps.dev.example.com","allow_subdomains":true,"max_ttl":"720h"}' \
+  $VAULT_ADDR/v1/pki/roles/dev-role</span></pre>
+      <div class="table-wrap">
+        <table>
+          <tr><th>Setting</th><th>Value</th><th>Meaning</th></tr>
+          <tr><td>Root CA TTL</td><td><code>87600h</code></td><td>10 years</td></tr>
+          <tr><td>Role max TTL</td><td><code>720h</code></td><td>30 days per leaf certificate</td></tr>
+          <tr><td>allow_subdomains</td><td><code>true</code></td><td><code>api.apps.dev.example.com</code> is allowed</td></tr>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- STEP 3 -->
+  <div class="section-header">
+    <div class="step-num">3</div>
+    <h2>Issue a certificate</h2>
+  </div>
+
+  <div class="card">
+    <div class="card-head">3a — Private key + CSR <span class="tag tag-amber">OpenSSL</span></div>
+    <div class="card-body">
+      <p>The key is generated locally, so Vault only ever sees the public CSR:</p>
+      <pre><span class="cmd">openssl req -new -newkey rsa:2048 -nodes \
+  -keyout api.key -out api.csr \
+  -subj "/C=GR/O=MyOrg/OU=Engineering/CN=api.apps.dev.example.com" \
+  -addext "subjectAltName=DNS:api.apps.dev.example.com"</span></pre>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head">3b — Sign the CSR <span class="tag tag-blue">Vault API</span></div>
+    <div class="card-body">
+      <pre><span class="cmd">jq -n --rawfile csr api.csr '{csr: $csr, format: "pem"}' \
+| curl -s -H "X-Vault-Token: $VAULT_TOKEN" -X POST -d @- \
+  $VAULT_ADDR/v1/pki/sign/dev-role \
+| jq -r '.data.certificate' > api.crt</span></pre>
+      <p>The script saves the certificate as <code>&lt;name&gt;.crt</code> and the CA chain as <code>&lt;name&gt;-chain.crt</code> next to the CSR.</p>
+      <div class="callout tip">
+        <div class="callout-icon">✓</div>
+        <div>Check the result with <code>openssl x509 -in api.crt -noout -subject -issuer -dates</code>. The issuer should be <code>CN=example.com</code>.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- STEP 4 -->
+  <div class="section-header">
+    <div class="step-num cyan">4</div>
+    <h2>Manage the lifecycle</h2>
+  </div>
+
+  <div class="card">
+    <div class="card-head">4a — List, revoke, CRL, tidy <span class="tag tag-blue">Vault API</span></div>
+    <div class="card-body">
+      <pre><span class="comment"># List serial numbers of issued certificates</span>
+<span class="cmd">curl -H "X-Vault-Token: $VAULT_TOKEN" "$VAULT_ADDR/v1/pki/certs?list=true"</span>
+
+<span class="comment"># Revoke one</span>
+<span class="cmd">curl -H "X-Vault-Token: $VAULT_TOKEN" -X POST \
+  -d '{"serial_number":"&lt;serial&gt;"}' \
+  $VAULT_ADDR/v1/pki/revoke</span>
+
+<span class="comment"># Read the certificate revocation list</span>
+<span class="cmd">curl $VAULT_ADDR/v1/pki/cert/crl</span>
+
+<span class="comment"># Clean up expired and revoked entries</span>
+<span class="cmd">curl -H "X-Vault-Token: $VAULT_TOKEN" -X POST \
+  -d '{"tidy_cert_store":true,"tidy_revoked_certs":true,"tidy_expired_issuers":true}' \
+  $VAULT_ADDR/v1/pki/tidy</span></pre>
+    </div>
+  </div>
+
+  <!-- STEP 5 -->
+  <div class="section-header">
+    <div class="step-num amber">5</div>
+    <h2>The PowerShell CA manager</h2>
+  </div>
+
+  <div class="card">
+    <div class="card-head">5a — First run <span class="tag tag-amber">PowerShell</span></div>
+    <div class="card-body">
+      <p>On first run the script asks for its settings and saves them to <code>vault-ca.config.json</code>, so nothing is hardcoded:</p>
+      <pre>{
+  <span class="kw">"WorkingDirectory"</span>: <span class="file">".\\vault-ca-data"</span>,
+  <span class="kw">"PkiPath"</span>: <span class="val">"pki"</span>,
+  <span class="kw">"RoleName"</span>: <span class="val">"dev-role"</span>,
+  <span class="kw">"RootCACommonName"</span>: <span class="val">"example.com"</span>,
+  <span class="kw">"RootCAIssuerName"</span>: <span class="val">"root-ca"</span>,
+  <span class="kw">"RootCATtl"</span>: <span class="val">"87600h"</span>,
+  <span class="kw">"RoleDomain"</span>: <span class="val">"apps.dev.example.com"</span>,
+  <span class="kw">"RoleMaxTtl"</span>: <span class="val">"720h"</span>
+}</pre>
+      <pre><span class="cmd">.\vault-ca-mana.ps1</span></pre>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head">5b — The menu <span class="tag tag-amber">PowerShell</span></div>
+    <div class="card-body">
+      <p>After start-up, Vault is running, the token is set for the session and the PKI engine is ready:</p>
+      <pre><span class="val">============================================================
+                 LOCAL VAULT CA MANAGER
+============================================================</span>
+ Address : http://localhost:8200
+ PKI     : pki
+ CA      : example.com
+ Role    : dev-role
+
+ <span class="kw">Certificate Operations</span>
+ [1] Generate private key + CSR
+ [2] Sign CSR
+ [3] List certificates
+ [4] Read certificate
+ [5] Revoke certificate
+ [6] Show CRL
+ [P] Export certificate + key to PFX
+
+ <span class="kw">Vault Operations</span>
+ [7] Tidy certificates
+ [8] Vault status
+ [9] Open Vault UI
+ [T] Install root CA into Windows trust store
+ [L] Show Vault logs
+ [S] Stop Vault
+
+ [C] Show configuration
+ [0] Exit</pre>
+      <div class="callout warn">
+        <div class="callout-icon">⚠</div>
+        <div><strong>[T]</strong> adds the lab root CA to the machine's Trusted Root store with <code>certutil -addstore Root</code>. It needs an admin shell. Remove the CA when you finish the lab.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TROUBLESHOOTING -->
+  <div class="section-header">
+    <div class="step-num" style="background:var(--red)">!</div>
+    <h2>Quick troubleshooting</h2>
+  </div>
+
+  <div class="card">
+    <div class="card-head">Common issues &amp; fixes</div>
+    <div class="card-body">
+      <p><strong style="color:var(--amber)">403 permission denied from the API:</strong></p>
+      <pre><span class="comment"># VAULT_TOKEN is empty or from an old container. Read it again:</span>
+<span class="cmd">docker logs vault | grep "Root Token"</span></pre>
+
+      <p><strong style="color:var(--amber)">"common name ... not allowed by this role":</strong></p>
+      <pre><span class="comment"># The CN must be inside allowed_domains. Check the role:</span>
+<span class="cmd">curl -H "X-Vault-Token: $VAULT_TOKEN" $VAULT_ADDR/v1/pki/roles/dev-role</span></pre>
+
+      <p><strong style="color:var(--amber)">Browser says the certificate is not trusted:</strong></p>
+      <pre><span class="comment"># The root CA is not in the trust store yet. Use menu option [T], or:</span>
+<span class="cmd">certutil -addstore -f Root root-ca.crt</span></pre>
+    </div>
+  </div>
+
+</main>
+
+<footer>
+  <div>Vault PKI CA Manager · <a href="../">← All projects</a></div>
+  <div>HashiCorp Vault · <a href="https://developer.hashicorp.com/vault/docs/secrets/pki">PKI docs ↗</a></div>
+</footer>
+
+</body>
+</html>

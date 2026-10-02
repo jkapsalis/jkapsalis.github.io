@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ioannis Kapsalis — System Engineer</title>
+<meta name="description" content="Ioannis Kapsalis — Junior System Engineer. Linux infrastructure labs: SaltStack, ELK, HashiCorp Vault PKI.">
+<link rel="stylesheet" href="assets/style.css">
+<link rel="stylesheet" href="assets/nav.css">
+</head>
+<body>
+
+<nav class="site-nav">
+  <div class="site-nav-inner">
+    <a class="site-brand" href="./">jkapsalis<span>.github.io</span></a>
+    <ul class="site-links">
+      <li><a href="./" aria-current="page">Home</a></li>
+      <li><a href="about/">About</a></li>
+      <li><a href="projects/">Projects</a></li>
+    </ul>
+  </div>
+</nav>
+
+<header class="page-header">
+  <div class="badge">Junior System Engineer · Athens, Greece</div>
+  <h1>Ioannis Kapsalis<br><span>DevOps on <span style="white-space:nowrap">bare-metal</span></span></h1>
+  <p class="lead">
+    I build Linux infrastructure labs and write each one up as a step-by-step guide:
+    configuration management, log pipelines and certificate authorities.
+  </p>
+  <div class="actions">
+    <a class="btn primary" href="projects/">View projects →</a>
+    <a class="btn" href="about/">About me</a>
+    <a class="btn" href="https://github.com/jkapsalis">GitHub ↗</a>
+  </div>
+</header>
+
+<main>
+
+  <pre><span class="prompt">$ </span><span class="cmd">whoami</span>
+<span class="ok">ioannis-kapsalis</span>
+<span class="prompt">$ </span><span class="cmd">cat role.txt</span>
+Junior System Engineer @ Netcompany
+<span class="prompt">$ </span><span class="cmd">ls ~/projects</span>
+<span class="file">saltstack/</span>  <span class="file">elk-stack/</span>  <span class="file">vault-pki/</span></pre>
+
+  <div class="section-header">
+    <div class="step-num cyan">→</div>
+    <h2>Latest projects</h2>
+  </div>
+
+  <div class="project-list">
+    <article class="project" style="--accent: var(--blue)">
+      <div class="kicker">Configuration management</div>
+      <h3><a href="projects/saltstack/">SaltStack master &amp; minions</a></h3>
+      <p>Central package and configuration management for Oracle Linux VMs.</p>
+    </article>
+
+    <article class="project" style="--accent: var(--cyan)">
+      <div class="kicker">Logging &amp; observability</div>
+      <h3><a href="projects/elk-stack/">ELK Stack + Filebeat on Docker</a></h3>
+      <p>Ship container and host logs through Logstash into Elasticsearch and Kibana.</p>
+    </article>
+
+    <article class="project" style="--accent: var(--amber)">
+      <div class="kicker">PKI &amp; security</div>
+      <h3><a href="projects/vault-pki/">Vault PKI CA Manager</a></h3>
+      <p>A local certificate authority on HashiCorp Vault, driven by a PowerShell menu.</p>
+    </article>
+  </div>
+
+</main>
+
+<footer>
+  <div>© 2026 Ioannis Kapsalis</div>
+  <div><a href="https://github.com/jkapsalis">github.com/jkapsalis</a></div>
+</footer>
+
+</body>
+</html>

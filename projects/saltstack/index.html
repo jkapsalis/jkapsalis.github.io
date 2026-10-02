@@ -1,0 +1,837 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SaltStack Setup Guide — Project 11</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Syne:wght@400;600;700;800&display=swap');
+
+  :root {
+    --bg: #0d0f14;
+    --surface: #13161e;
+    --surface2: #1a1e2a;
+    --border: #252a38;
+    --salt-blue: #4a9eff;
+    --salt-cyan: #00d4aa;
+    --salt-amber: #ffb84d;
+    --salt-red: #ff5f6d;
+    --text: #c8d0e0;
+    --text-dim: #6b7490;
+    --text-bright: #eef0f8;
+    --step-w: 680px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Syne', sans-serif;
+    line-height: 1.6;
+    min-height: 100vh;
+  }
+
+  /* ── HEADER ── */
+  header {
+    padding: 3rem 2rem 2rem;
+    max-width: 860px;
+    margin: 0 auto;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .badge {
+    display: inline-block;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--salt-cyan);
+    background: rgba(0, 212, 170, 0.08);
+    border: 1px solid rgba(0, 212, 170, 0.25);
+    padding: 0.25rem 0.75rem;
+    border-radius: 4px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    margin-bottom: 1rem;
+  }
+
+  h1 {
+    font-size: clamp(1.8rem, 4vw, 2.8rem);
+    font-weight: 800;
+    color: var(--text-bright);
+    line-height: 1.15;
+    margin-bottom: 0.75rem;
+  }
+
+  h1 span { color: var(--salt-blue); }
+
+  .meta {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.8rem;
+    color: var(--text-dim);
+    display: flex;
+    gap: 1.5rem;
+    flex-wrap: wrap;
+  }
+
+  .meta span { color: var(--salt-amber); }
+
+  /* ── LAYOUT ── */
+  main {
+    max-width: 860px;
+    margin: 0 auto;
+    padding: 2rem;
+  }
+
+  /* ── TOPOLOGY DIAGRAM ── */
+  .topology {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1.5rem;
+    margin: 2rem 0;
+    text-align: center;
+  }
+
+  .topology-title {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    color: var(--text-dim);
+    margin-bottom: 1.25rem;
+  }
+
+  .topo-row {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+    margin-bottom: 0.5rem;
+  }
+
+  .node {
+    background: var(--surface2);
+    border: 1.5px solid var(--border);
+    border-radius: 8px;
+    padding: 0.75rem 1.25rem;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.8rem;
+    min-width: 160px;
+  }
+
+  .node.master { border-color: var(--salt-blue); }
+  .node.minion { border-color: var(--salt-cyan); }
+  .node.future { border-color: var(--border); opacity: 0.5; }
+
+  .node-label {
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-bottom: 0.3rem;
+  }
+  .master .node-label { color: var(--salt-blue); }
+  .minion .node-label { color: var(--salt-cyan); }
+  .future .node-label { color: var(--text-dim); }
+
+  .node-ip { color: var(--text-bright); font-weight: 600; font-size: 0.85rem; }
+  .node-name { color: var(--text-dim); font-size: 0.72rem; }
+
+  .arrow {
+    color: var(--text-dim);
+    font-size: 1.2rem;
+  }
+
+  .port-note {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.68rem;
+    color: var(--text-dim);
+    margin-top: 0.75rem;
+  }
+  .port-note span { color: var(--salt-amber); }
+
+  /* ── SECTION TITLES ── */
+  .section-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin: 2.5rem 0 1.25rem;
+  }
+
+  .step-num {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: var(--salt-blue);
+    color: #fff;
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 700;
+    font-size: 0.85rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .step-num.cyan { background: var(--salt-cyan); color: #0d0f14; }
+
+  h2 {
+    font-size: 1.3rem;
+    font-weight: 700;
+    color: var(--text-bright);
+  }
+
+  /* ── CARDS ── */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    margin-bottom: 1.25rem;
+    overflow: hidden;
+  }
+
+  .card-head {
+    padding: 0.75rem 1.25rem;
+    background: var(--surface2);
+    border-bottom: 1px solid var(--border);
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-dim);
+    font-family: 'JetBrains Mono', monospace;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .card-head .tag {
+    font-size: 0.65rem;
+    padding: 0.15rem 0.5rem;
+    border-radius: 3px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+
+  .tag-master { background: rgba(74,158,255,0.15); color: var(--salt-blue); }
+  .tag-minion { background: rgba(0,212,170,0.12); color: var(--salt-cyan); }
+  .tag-both { background: rgba(255,184,77,0.12); color: var(--salt-amber); }
+
+  .card-body { padding: 1.25rem; }
+
+  /* ── CODE BLOCKS ── */
+  pre {
+    background: #080a0f;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 1rem 1.25rem;
+    overflow-x: auto;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.82rem;
+    line-height: 1.75;
+    margin: 0.75rem 0;
+  }
+
+  .cmd { color: var(--text-bright); }
+  .comment { color: #4a5270; }
+  .kw { color: var(--salt-blue); }
+  .val { color: var(--salt-cyan); }
+  .file { color: var(--salt-amber); }
+  .ok { color: var(--salt-cyan); }
+  .warn { color: var(--salt-amber); }
+  .err { color: var(--salt-red); }
+
+  p { margin-bottom: 0.75rem; font-size: 0.95rem; }
+  p:last-child { margin-bottom: 0; }
+
+  /* ── CALLOUTS ── */
+  .callout {
+    display: flex;
+    gap: 0.75rem;
+    padding: 0.9rem 1rem;
+    border-radius: 7px;
+    font-size: 0.87rem;
+    margin: 0.75rem 0;
+    border-left: 3px solid;
+  }
+
+  .callout.info { background: rgba(74,158,255,0.07); border-color: var(--salt-blue); }
+  .callout.warn { background: rgba(255,184,77,0.07); border-color: var(--salt-amber); }
+  .callout.tip  { background: rgba(0,212,170,0.07);  border-color: var(--salt-cyan); }
+
+  .callout-icon { font-size: 1rem; flex-shrink: 0; margin-top: 0.1rem; }
+
+  /* ── INLINE CODE ── */
+  code {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.82em;
+    background: rgba(255,255,255,0.06);
+    padding: 0.1em 0.4em;
+    border-radius: 3px;
+    color: var(--salt-cyan);
+  }
+
+  /* ── CHECKLIST ── */
+  .checklist {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    margin: 0.5rem 0;
+  }
+
+  .checklist li {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.82rem;
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+  }
+
+  .checklist li::before {
+    content: '□';
+    color: var(--text-dim);
+    font-size: 1rem;
+    flex-shrink: 0;
+  }
+
+  /* ── FOOTER ── */
+  footer {
+    max-width: 860px;
+    margin: 3rem auto 2rem;
+    padding: 1.5rem 2rem;
+    border-top: 1px solid var(--border);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.72rem;
+    color: var(--text-dim);
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  footer span { color: var(--salt-blue); }
+</style>
+<link rel="stylesheet" href="../../assets/nav.css">
+</head>
+<body>
+
+<nav class="site-nav">
+  <div class="site-nav-inner">
+    <a class="site-brand" href="../../">jkapsalis<span>.github.io</span></a>
+    <ul class="site-links">
+      <li><a href="../../">Home</a></li>
+      <li><a href="../../about/">About</a></li>
+      <li><a href="../" aria-current="page">Projects</a></li>
+    </ul>
+  </div>
+</nav>
+
+<header>
+  <div class="badge">Project 11 · SaltStack</div>
+  <h1>Centralized Package &amp; Config<br>Management with <span>SaltStack</span></h1>
+  <div class="meta">
+    Steps covered: <span>1 — Master Setup</span> &amp; <span>2 — Minion Setup</span>
+    &nbsp;·&nbsp; Platform: <span>RHEL/Fedora (dnf)</span>
+    &nbsp;·&nbsp; Master IP: <span>192.168.56.107</span>
+  </div>
+</header>
+
+<main>
+
+  <!-- TOPOLOGY -->
+  <div class="topology">
+    <div class="topology-title">Lab Topology</div>
+    <div class="topo-row">
+      <div class="node master">
+        <div class="node-label">Salt Master</div>
+        <div class="node-ip">192.168.56.107</div>
+        <div class="node-name">salt-master (current VM)</div>
+      </div>
+    </div>
+    <div class="topo-row" style="margin:0.4rem 0">
+      <div class="arrow">↕</div>
+      <div style="font-family:'JetBrains Mono',monospace;font-size:0.7rem;color:var(--text-dim)"></div>
+      <div class="arrow">↕</div>
+    </div>
+    <div class="topo-row">
+      <div class="node minion">
+        <div class="node-label">Minion 1</div>
+        <div class="node-ip">192.168.56.119</div>
+        <div class="node-name">to be created</div>
+      </div>
+      <div class="node future">
+        <div class="node-label">Minion 2</div>
+        <div class="node-ip">192.168.56.120</div>
+        <div class="node-name">future VM</div>
+      </div>
+    </div>
+    <div class="port-note">
+      Ports required open on master:
+      <span>4505</span> (publish) &nbsp;·&nbsp;
+      <span>4506</span> (return)
+    </div>
+  </div>
+
+<!-- ═══════════════════════════════════════
+       STEP 0 — Install Salt MASTER on RHEL vm
+  ═══════════════════════════════════════ -->
+    <div class="section-header">
+    <div class="step-num cyan" style="color:#fff;">
+     Why<br>Who<br>and<br>What
+  </div>
+
+  </div>
+  <!-- Introduction -->
+<div class="card" style="border-color:rgba(74,158,255,0.3)">
+  <div class="card-head" style="background:rgba(74,158,255,0.06)">
+    Introduction — SaltStack Overview & Project Scope
+  </div>
+
+  <div class="card-body">
+
+    <p>
+      <strong>SaltStack</strong> is an open-source infrastructure automation and configuration management tool 
+      designed to manage and control large numbers of systems from a central point. It is built using Python 
+      and provides fast, scalable communication between a central controller (master) and managed nodes (minions).
+    </p>
+
+    <p>
+      SaltStack enables administrators to automate routine tasks such as package installation, system updates, 
+      service management, and configuration enforcement. Its event-driven architecture and remote execution 
+      capabilities make it a powerful solution for modern infrastructure management.
+    </p>
+
+    <hr>
+
+    <p><strong>Project Objective</strong></p>
+
+    <p>
+      The goal of this project is to implement SaltStack in a controlled lab environment in order to centrally 
+      manage multiple Linux systems. The setup focuses on establishing a Salt master server and connecting 
+      minion nodes to enable remote execution and configuration management.
+    </p>
+
+    <p>
+      Through this implementation, the system administrator will be able to:
+    </p>
+
+    <ul class="checklist">
+      <li>Automate package installation across multiple systems</li>
+      <li>Manage software updates from a central location</li>
+      <li>Apply consistent configuration policies</li>
+      <li>Execute remote commands efficiently and securely</li>
+    </ul>
+
+    <p>
+      This guide walks through the installation, configuration, and validation of a functional SaltStack 
+      environment, starting with the master setup and expanding to managed minion systems.
+    </p>
+
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════
+       STEP 0 — Install Salt MASTER on RHEL vm
+  ═══════════════════════════════════════ -->
+    <div class="section-header">
+    <div class="step-num cyan">0</div>
+    <h2>Install the Salt Stack on Oracle Linux 9.5 VM</h2>
+  </div>
+
+  <!-- Best Practices -->
+<div class="card" style="border-color:rgba(255,193,7,0.3)">
+  <div class="card-head" style="background:rgba(255,193,7,0.08)">
+    Best Practices — Salt Master Configuration
+  </div>
+
+  <div class="card-body">
+
+    <p>
+      Instead of placing all configuration inside <code>/etc/salt/master</code>, it is recommended to use the 
+      <code>/etc/salt/master.d/</code> directory. This approach allows better organization by separating 
+      configuration into logical files.
+    </p>
+
+    <p>
+      For example, performance tuning settings can be placed in a dedicated file such as:
+    </p>
+
+    <pre><code>
+/etc/salt/master.d/tuning.conf
+    </code></pre>
+
+    <p>
+      This keeps the main configuration clean and makes maintenance easier in larger environments.
+    </p>
+
+    <hr>
+
+    <p><strong>Salt Master Network Settings</strong></p>
+    <p>
+      By default, the Salt master binds to all available network interfaces and listens on the following ports:
+    </p>
+
+    <pre><code>
+4505 (publisher)
+4506 (return)
+    </code></pre>
+
+    <p>
+      Ensure these ports are open and accessible from minion systems.
+    </p>
+
+    <hr>
+
+    <p><strong>Salt Master Process Management</strong></p>
+    <p>
+      In environments with many minions, job responses may appear to stall. This does not always indicate failure—
+      it may mean the master cannot process responses fast enough.
+    </p>
+
+    <p>
+      Salt uses worker processes to handle minion return data. This behavior is controlled by the 
+      <code>worker_threads</code> setting.
+    </p>
+
+    <pre><code>
+# Example tuning
+worker_threads: 10
+    </code></pre>
+
+    <p>
+      Default value: 5<br>
+      Minimum value: 3
+    </p>
+
+    <p>
+      Increasing this value can improve performance in larger environments with many minions.
+    </p>
+
+  </div>
+</div>
+
+  
+   <!-- 0. Installation of salt components -->
+<div class="card">
+  <div class="card-head">
+    0. — Install Salt Components <span class="tag tag-master">Master & Minion</span>
+  </div>
+
+  <div class="card-body">
+    <p>
+      <strong>Introduction for SaltStack</strong> SaltStack is an open-source IT automation tool used for remote execution and configuration management. 
+      It is Python-based and designed for fast, scalable infrastructure control.
+    </p>
+
+    <p>First, add the official Salt Project repository and install the master service:</p>
+
+    <pre>
+<span class="comment"># Add Salt Project repository</span>
+<span class="cmd">curl -fsSL https://github.com/saltstack/salt-install-guide/releases/latest/download/salt.repo | sudo tee /etc/yum.repos.d/salt.repo</span>
+
+<span class="comment"># Refresh package cache</span>
+<span class="cmd">sudo dnf clean expire-cache</span>
+
+<span class="comment"># Install Salt Master</span>
+<span class="cmd">sudo dnf install -y salt-master</span>
+    </pre>
+
+    <p>On the minion VM, install the Salt minion service:</p>
+
+    <pre>
+<span class="comment"># Install Salt Minion</span>
+<span class="cmd">sudo dnf install -y salt-minion</span>
+    </pre>
+
+    <p>Optional components for extended functionality:</p>
+
+    <pre>
+<span class="comment"># Remote execution without minions</span>
+<span class="cmd">sudo dnf install -y salt-ssh</span>
+
+<span class="comment"># Multi-master scaling</span>
+<span class="cmd">sudo dnf install -y salt-syndic</span>
+
+<span class="comment"># Cloud provisioning support</span>
+<span class="cmd">sudo dnf install -y salt-cloud</span>
+
+<span class="comment"># REST API interface</span>
+<span class="cmd">sudo dnf install -y salt-api</span>
+    </pre>
+  </div>
+</div>
+
+  <!-- ═══════════════════════════════════════
+       STEP 1 — MASTER
+  ═══════════════════════════════════════ -->
+  <div class="section-header">
+    <div class="step-num">1</div>
+    <h2>Configure the Salt Master (192.168.56.107)</h2>
+  </div>
+
+  <!-- 1a. Verify install -->
+  <div class="card">
+    <div class="card-head">1a — Verify Installation &amp; Enable Services <span class="tag tag-master">Master</span></div>
+    <div class="card-body">
+      <p>You've already run <code>dnf install salt-master</code>. Confirm the binary is present, then enable and start the service:</p>
+      <pre>
+<span class="comment"># Verify the binary</span>
+<span class="cmd">salt-master --version</span>
+
+<span class="comment"># Enable at boot and start immediately</span>
+<span class="cmd">systemctl enable --now salt-master</span>
+
+<span class="comment"># Confirm it's running</span>
+<span class="cmd">systemctl status salt-master</span>
+<span class="ok"># Expected: Active: active (running)</span></pre>
+    </div>
+  </div>
+
+  <!-- 1b. master config -->
+  <div class="card">
+    <div class="card-head">1b — Edit Master Configuration <span class="tag tag-master">Master</span></div>
+    <div class="card-body">
+      <p>Open <code>/etc/salt/master</code> and set the interface so the master listens on your host-only IP:</p>
+      <pre>
+<span class="comment"># Open the master config</span>
+<span class="cmd">vi /etc/salt/master</span></pre>
+
+      <p>Find and uncomment / set these lines:</p>
+      <pre>
+<span class="comment"># Bind to your host-only adapter IP</span>
+<span class="kw">interface</span>: <span class="val">192.168.56.107</span>
+
+<span class="comment"># (Optional but recommended) give the master a resolvable name</span>
+<span class="comment"># minions will use this to reach the master</span>
+<span class="kw">publish_port</span>: <span class="val">4505</span>
+<span class="kw">ret_port</span>: <span class="val">4506</span>
+
+<span class="comment"># Where states/pillars will live</span>
+<span class="kw">file_roots</span>:
+  <span class="val">base</span>:
+    - <span class="file">/srv/salt</span>
+
+<span class="kw">pillar_roots</span>:
+  <span class="val">base</span>:
+    - <span class="file">/srv/pillar</span></pre>
+
+      <p>After saving, create the directories and restart:</p>
+      <pre>
+<span class="cmd">mkdir -p /srv/salt /srv/pillar</span>
+<span class="cmd">systemctl restart salt-master</span></pre>
+    </div>
+  </div>
+
+  <!-- 1c. Firewall -->
+  <div class="card">
+    <div class="card-head">1c — Open Firewall Ports <span class="tag tag-master">Master</span></div>
+    <div class="card-body">
+      <p>Minions contact the master on ports <strong>4505</strong> and <strong>4506</strong>. Open them with <code>firewalld</code>:</p>
+      <pre>
+<span class="cmd">firewall-cmd --permanent --add-port=4505/tcp</span>
+<span class="cmd">firewall-cmd --permanent --add-port=4506/tcp</span>
+<span class="cmd">firewall-cmd --reload</span>
+
+<span class="comment"># Verify</span>
+<span class="cmd">firewall-cmd --list-ports</span>
+<span class="ok"># Should show: 4505/tcp 4506/tcp</span></pre>
+      <div class="callout warn">
+        <div class="callout-icon">⚠</div>
+        <div>If you're using SELinux in enforcing mode, Salt ports are already labelled correctly in modern packages — but if connections fail, check <code>ausearch -m avc -ts recent</code> for denials.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 1d. /etc/hosts -->
+  <div class="card">
+    <div class="card-head">1d — Add /etc/hosts Entry (recommended) <span class="tag tag-both">Master + Minions</span></div>
+    <div class="card-body">
+      <p>By default minions try to resolve the hostname <code>salt</code>. Adding an entry eliminates DNS dependency in your lab:</p>
+      <pre>
+<span class="comment"># On the MASTER:</span>
+<span class="cmd">echo "192.168.56.107  salt" >> /etc/hosts</span>
+
+<span class="comment"># You will also add the same line on each minion VM after creation.</span></pre>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════
+       STEP 2 — MINION
+  ═══════════════════════════════════════ -->
+  <div class="section-header">
+    <div class="step-num cyan">2</div>
+    <h2>Set Up Salt Minions (new VMs)</h2>
+  </div>
+
+  <div class="callout tip">
+    <div class="callout-icon">💡</div>
+    <div>Repeat every sub-step below on <strong>each new VM</strong> you create. A quick way is to snapshot a "base" VM after step 2a, then clone it — you only need to change the hostname and minion ID.</div>
+  </div>
+
+  <!-- 2a install -->
+  <div class="card">
+    <div class="card-head">2a — Install salt-minion on each VM <span class="tag tag-minion">Minion</span></div>
+    <div class="card-body">
+      <pre>
+<span class="comment"># Bootstrap the Salt repo (same repo as master)</span>
+<span class="cmd">dnf install -y salt-minion</span>
+
+<span class="comment"># Enable at boot (don't start yet — configure first)</span>
+<span class="cmd">systemctl enable salt-minion</span></pre>
+    </div>
+  </div>
+
+  <!-- 2b minion config -->
+  <div class="card">
+    <div class="card-head">2b — Configure /etc/salt/minion <span class="tag tag-minion">Minion</span></div>
+    <div class="card-body">
+      <p>Edit <code>/etc/salt/minion</code> to point to your master and set a unique minion ID:</p>
+      <pre>
+<span class="cmd">vi /etc/salt/minion</span></pre>
+
+      <pre>
+<span class="comment"># Point to the master (by IP or hostname "salt" if /etc/hosts is set)</span>
+<span class="kw">master</span>: <span class="val">192.168.56.107</span>
+
+<span class="comment"># Give this minion a meaningful, unique ID</span>
+<span class="kw">id</span>: <span class="val">minion-01</span>    <span class="comment"># change to minion-02, web-01, db-01, etc.</span></pre>
+
+      <p>Also add the <code>/etc/hosts</code> entry so "salt" resolves:</p>
+      <pre>
+<span class="cmd">echo "192.168.56.107  salt" >> /etc/hosts</span></pre>
+
+      <p>Now start the minion:</p>
+      <pre>
+<span class="cmd">systemctl start salt-minion</span>
+<span class="cmd">systemctl status salt-minion</span>
+<span class="ok"># Expected: Active: active (running)</span></pre>
+    </div>
+  </div>
+
+  <!-- 2c. Accept key -->
+  <div class="card">
+    <div class="card-head">2c — Accept Minion Keys on the Master <span class="tag tag-master">Master</span></div>
+    <div class="card-body">
+      <p>When a minion first connects, it sends a cryptographic key to the master for approval. Run this on the <strong>master</strong>:</p>
+      <pre>
+<span class="comment"># List all pending keys</span>
+<span class="cmd">salt-key -L</span>
+<span class="ok"># Unaccepted Keys:
+# minion-01</span>
+
+<span class="comment"># Accept a single minion</span>
+<span class="cmd">salt-key -a minion-01</span>
+
+<span class="comment"># OR accept ALL pending keys at once</span>
+<span class="cmd">salt-key -A</span>
+
+<span class="comment"># Confirm accepted keys</span>
+<span class="cmd">salt-key -L</span>
+<span class="ok"># Accepted Keys:
+# minion-01</span></pre>
+
+      <div class="callout info">
+        <div class="callout-icon">ℹ</div>
+        <div>In production, review each key before accepting. For your lab, <code>salt-key -A</code> is fine. You can also set <code>auto_accept: True</code> in <code>/etc/salt/master</code> to skip this step entirely during development.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2d. Test -->
+  <div class="card">
+    <div class="card-head">2d — Test Connectivity <span class="tag tag-master">Master</span></div>
+    <div class="card-body">
+      <p>Run a quick ping to verify the master can reach all accepted minions:</p>
+      <pre>
+<span class="comment"># Ping all minions (returns True for each reachable minion)</span>
+<span class="cmd">salt '*' test.ping</span>
+<span class="ok">minion-01:
+    True</span>
+
+<span class="comment"># Target a specific minion</span>
+<span class="cmd">salt 'minion-01' test.ping</span>
+
+<span class="comment"># Get OS information from all minions</span>
+<span class="cmd">salt '*' grains.item os osrelease</span></pre>
+
+      <div class="callout tip">
+        <div class="callout-icon">✓</div>
+        <div>If <code>test.ping</code> returns <code>True</code> for every minion — Steps 1 and 2 are complete! You now have a fully operational Salt master with registered minions.</div>
+      </div>
+    </div>
+  </div>
+
+
+  <!--MY configuration images as guideline for SALT-MASTER  -->
+  <div class="section-header" style="margin-top:2rem">
+    <div class="step-num" style="background:var(--salt-red);width:36px;height:36px;font-size:1rem">conf</div>
+    <h2>My Configuration guideline</h2>
+  </div>
+
+  <div class="card">
+    <div class="card-head">Basic Configuration &amp; implementation </div>
+    <div class="card-body">
+      <p><strong style="color:var(--salt-amber)">Common Configuration Setup ON SALT-MASTER </strong></p>
+      <pre>
+<span class="comment">#Set the master IP in the minion configuration</span>
+<span class="cmd">master: 192.168.56.107 </span>
+<span class="comment">#Set the ports and the user (basically uncomment those parameters)</span>
+<span class="cmd">publish_port : 4505</span>
+<span class="cmd">ret_port : 4506 </span>
+<span class="comment">#For the lab purposes uncomment the file_root at the File Server settings </span>
+<span class="comment">#file_root: base : - /srv/salt</span></pre>
+<span class="comment">and the same for pillar_roots #pillar_roots: base : - /srv/salt</span></pre>
+<span class="comment">#this is the file server settings</span></pre>
+<img src="photos_screen/file_server_settings.png" alt="File server settings">
+<span class="comment">#this is the pillar settings</span></pre>
+<img src="photos_screen/pillar_settings.png" alt="Pillar settings">
+<span class="comment">#this is the port settings</span></pre>
+<img src="photos_screen/ports_set.png" alt="Port settings">
+    </div>
+  </div>
+
+
+  <!-- QUICK TROUBLESHOOTING -->
+  <div class="section-header" style="margin-top:2rem">
+    <div class="step-num" style="background:var(--salt-red);width:36px;height:36px;font-size:1rem"> HELPFULL 4 later </div>
+    <h2>Quick Troubleshooting</h2>
+  </div>
+
+  <div class="card">
+    <div class="card-head">Common Issues &amp; Fixes</div>
+    <div class="card-body">
+      <p><strong style="color:var(--salt-amber)">Minion key doesn't appear on master:</strong></p>
+      <pre>
+<span class="comment"># Check minion logs for connection errors</span>
+<span class="cmd">journalctl -u salt-minion -n 50</span>
+<span class="comment"># Usually: wrong master IP or firewall blocking 4505/4506</span></pre>
+
+      <p><strong style="color:var(--salt-amber)">salt '*' hangs or returns nothing:</strong></p>
+      <pre>
+<span class="comment"># Verify master is listening on both ports</span>
+<span class="cmd">ss -tlnp | grep -E '4505|4506'</span>
+<span class="comment"># Test from minion side</span>
+<span class="cmd">telnet 192.168.56.107 4505</span></pre>
+    </div>
+  </div>
+
+  <!-- WHATS NEXT -->
+  <div class="card" style="border-color:rgba(74,158,255,0.3)">
+    <div class="card-head" style="background:rgba(74,158,255,0.06)">What's Next — Remaining Project Steps</div>
+    <div class="card-body">
+      <ul class="checklist">
+        <li>Step 3 — Create SaltStack states to define package installation and update policies.</li>
+        <li>Step 4 —Implement configuration management using SaltStack formulas or custom states..</li>
+      </ul>
+    </div>
+  </div>
+
+</main>
+
+<footer>
+  <div>SaltStack Project 11 · Steps 1 &amp; 2</div>
+  <div>Master: <span>192.168.56.107</span> · Ports: <span>4505 / 4506</span></div>
+</footer>
+
+</body>
+</html>

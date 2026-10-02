@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ELK Stack + Filebeat on Docker — Ioannis Kapsalis</title>
+<meta name="description" content="Step-by-step guide: Elasticsearch, Logstash, Kibana and Filebeat 8.13 lab on Docker Compose.">
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="../../assets/nav.css">
+</head>
+<body>
+
+<nav class="site-nav">
+  <div class="site-nav-inner">
+    <a class="site-brand" href="../../">jkapsalis<span>.github.io</span></a>
+    <ul class="site-links">
+      <li><a href="../../">Home</a></li>
+      <li><a href="../../about/">About</a></li>
+      <li><a href="../" aria-current="page">Projects</a></li>
+    </ul>
+  </div>
+</nav>
+
+<header class="page-header">
+  <div class="badge">Project · ELK Stack</div>
+  <h1>Log Pipeline with <span>ELK</span><br>+ Filebeat on Docker</h1>
+  <div class="meta">
+    Version: <span>8.13.0</span>
+    Runtime: <span>Docker Compose v2</span>
+    Cluster: <span>single-node</span>
+  </div>
+</header>
+
+<main>
+
+  <!-- TOPOLOGY -->
+  <div class="topology">
+    <div class="topology-title">Data flow · docker network "elk"</div>
+    <div class="topo-row">
+      <div class="node amber">
+        <div class="node-label">Shipper</div>
+        <div class="node-main">Filebeat</div>
+        <div class="node-sub">container + host</div>
+      </div>
+      <div class="arrow side">→</div>
+      <div class="node cyan">
+        <div class="node-label">Pipeline</div>
+        <div class="node-main">Logstash</div>
+        <div class="node-sub">:5044 · :5000</div>
+      </div>
+      <div class="arrow side">→</div>
+      <div class="node blue">
+        <div class="node-label">Store &amp; search</div>
+        <div class="node-main">Elasticsearch</div>
+        <div class="node-sub">:9200</div>
+      </div>
+      <div class="arrow side">→</div>
+      <div class="node blue">
+        <div class="node-label">UI</div>
+        <div class="node-main">Kibana</div>
+        <div class="node-sub">:5601</div>
+      </div>
+    </div>
+    <div class="port-note">
+      Security on (<span>basic license</span>) · TLS off inside the Docker network · lab use only
+    </div>
+  </div>
+
+  <!-- INTRO -->
+  <div class="card intro">
+    <div class="card-head">Introduction — What and why</div>
+    <div class="card-body">
+      <p>
+        The <strong>ELK Stack</strong> is a log platform made of three tools: <strong>Elasticsearch</strong>
+        stores and indexes events, <strong>Logstash</strong> receives and parses them, and <strong>Kibana</strong>
+        is the web UI for searching and dashboards. <strong>Filebeat</strong> is a lightweight agent that
+        reads log files and ships them into the pipeline.
+      </p>
+      <p><strong>Project objective</strong></p>
+      <p>Build a self-contained lab that starts with Docker Compose and can:</p>
+      <ul class="checklist">
+        <li>Collect logs from every Docker container on the host</li>
+        <li>Collect Linux syslog and auth logs</li>
+        <li>Parse JSON and Apache/Nginx access logs in Logstash</li>
+        <li>Search everything in Kibana behind a login</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- STEP 0 -->
+  <div class="section-header">
+    <div class="step-num cyan">0</div>
+    <h2>Prerequisites</h2>
+  </div>
+
+  <div class="card">
+    <div class="card-head">Tools &amp; kernel setting <span class="tag tag-amber">Host</span></div>
+    <div class="card-body">
+      <div class="table-wrap">
+        <table>
+          <tr><th>Tool</th><th>Minimum version</th></tr>
+          <tr><td>Docker Engine</td><td>24+</td></tr>
+          <tr><td>Docker Compose v2</td><td>2.24+</td></tr>
+        </table>
+      </div>
+      <p>Elasticsearch needs a higher memory-map limit on Linux hosts:</p>
+      <pre><span class="cmd">sudo sysctl -w vm.max_map_count=262144</span>
+
+<span class="comment"># Make it permanent</span>
+<span class="cmd">echo "vm.max_map_count=262144" | sudo tee -a /etc/sysctl.conf</span></pre>
+    </div>
+  </div>
+
+  <!-- STEP 1 -->
+  <div class="section-header">
+    <div class="step-num">1</div>
+    <h2>Clone and configure</h2>
+  </div>
+
+  <div class="card">
+    <div class="card-head">1a — Clone the repository</div>
+    <div class="card-body">
+      <pre><span class="cmd">git clone https://github.com/jkapsalis/ELK-stack-setup-docker.git</span>
+<span class="cmd">cd ELK-stack-setup-docker</span></pre>
+      <pre><span class="file">.</span>
+├── <span class="file">docker-compose.yml</span>          <span class="comment"># orchestration</span>
+├── <span class="file">setup.ps1</span>                   <span class="comment"># one-time kibana_system password</span>
+├── filebeat/config/<span class="file">filebeat.yml</span>
+├── kibana/config/<span class="file">kibana.yml</span>
+└── logstash/
+    ├── config/<span class="file">logstash.yml</span>
+    └── pipeline/<span class="file">logstash.conf</span>  <span class="comment"># edit your pipeline here</span></pre>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head">1b — Create the .env file</div>
+    <div class="card-body">
+      <p>Compose reads secrets and heap sizes from <code>.env</code>. Every value has a default, so change at least the passwords:</p>
+      <pre><span class="comment"># .env  — keep this file out of git</span>
+<span class="kw">ELASTIC_PASSWORD</span>=<span class="val">change-me-elastic</span>
+<span class="kw">KIBANA_PASSWORD</span>=<span class="val">change-me-kibana</span>
+<span class="kw">KIBANA_ENCRYPTION_KEY</span>=<span class="val">any-random-string-of-32-characters</span>
+<span class="kw">ES_HEAP</span>=<span class="val">512m</span>
+<span class="kw">LS_HEAP</span>=<span class="val">256m</span></pre>
+      <div class="callout info">
+        <div class="callout-icon">ℹ</div>
+        <div>For a laptop lab, <code>512m</code> for Elasticsearch and <code>256m</code> for Logstash is enough.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- STEP 2 -->
+  <div class="section-header">
+    <div class="step-num">2</div>
+    <h2>Start Elasticsearch first</h2>
+  </div>
+
+  <div class="card">
+    <div class="card-head">2a — Bring up the database <span class="tag tag-blue">Elasticsearch</span></div>
+    <div class="card-body">
+      <pre><span class="cmd">docker compose up -d elasticsearch</span>
+
+<span class="comment"># Load .env into your shell so the commands below can use the passwords</span>
+<span class="cmd">set -a; source .env; set +a</span>
+
+<span class="comment"># Wait until the health check reports green or yellow</span>
+<span class="cmd">curl -u elastic:$ELASTIC_PASSWORD http://localhost:9200/_cluster/health?pretty</span>
+<span class="ok">"status" : "yellow"</span></pre>
+      <p>
+        The compose file gives Elasticsearch a health check that polls <code>_cluster/health</code>.
+        Logstash, Kibana and Filebeat use <code>depends_on: condition: service_healthy</code>, so they
+        never start against a database that isn't ready.
+      </p>
+      <div class="callout tip">
+        <div class="callout-icon">💡</div>
+        <div><code>yellow</code> is normal for a single node: replica shards have nowhere to go.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- STEP 3 -->
+  <div class="section-header">
+    <div class="step-num">3</div>
+    <h2>Set the kibana_system password</h2>
+  </div>
+
+  <div class="card">
+    <div class="card-head">3a — Run setup.ps1 once <span class="tag tag-amber">Host</span></div>
+    <div class="card-body">
+      <p>
+        Kibana 8 refuses to connect as the <code>elastic</code> superuser. It logs in as the built-in
+        <code>kibana_system</code> user, whose password must match <code>KIBANA_PASSWORD</code>.
+        The script waits for Elasticsearch, then sets it through the security API:
+      </p>
+      <pre><span class="cmd">./setup.ps1</span>
+<span class="ok">Elasticsearch is up.
+kibana_system password set.</span></pre>
+      <p>The same call with curl, if you are not on PowerShell:</p>
+      <pre><span class="cmd">curl -u elastic:$ELASTIC_PASSWORD \
+  -X POST http://localhost:9200/_security/user/kibana_system/_password \
+  -H "Content-Type: application/json" \
+  -d "{\"password\":\"$KIBANA_PASSWORD\"}"</span></pre>
+      <div class="callout warn">
+        <div class="callout-icon">⚠</div>
+        <div>If you change <code>KIBANA_PASSWORD</code> later, run the script again.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- STEP 4 -->
+  <div class="section-header">
+    <div class="step-num">4</div>
+    <h2>Start the full stack</h2>
+  </div>
+
+  <div class="card">
+    <div class="card-head">4a — Compose up <span class="tag tag-cyan">All services</span></div>
+    <div class="card-body">
+      <pre><span class="cmd">docker compose up -d</span>
+<span class="cmd">docker compose ps</span></pre>
+      <p>Open <code>http://localhost:5601</code> and log in as <code>elastic</code> with your <code>ELASTIC_PASSWORD</code>.</p>
+      <div class="table-wrap">
+        <table>
+          <tr><th>Service</th><th>Port</th><th>Purpose</th></tr>
+          <tr><td>Elasticsearch</td><td><code>9200</code></td><td>REST API</td></tr>
+          <tr><td>Elasticsearch</td><td><code>9300</code></td><td>Node transport</td></tr>
+          <tr><td>Kibana</td><td><code>5601</code></td><td>Web UI</td></tr>
+          <tr><td>Logstash</td><td><code>5044</code></td><td>Beats input</td></tr>
+          <tr><td>Logstash</td><td><code>5000</code></td><td>TCP JSON input</td></tr>
+          <tr><td>Logstash</td><td><code>9600</code></td><td>Monitoring API</td></tr>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- STEP 5 -->
+  <div class="section-header">
+    <div class="step-num cyan">5</div>
+    <h2>How the pipeline works</h2>
+  </div>
+
+  <div class="card">
+    <div class="card-head">5a — Filebeat inputs <span class="tag tag-amber">filebeat.yml</span></div>
+    <div class="card-body">
+      <p>Filebeat runs as <code>root</code> with the Docker log directory and socket mounted read-only, so it can read every container's logs and tag them with container metadata:</p>
+      <pre><span class="kw">filebeat.inputs</span>:
+  - <span class="kw">type</span>: <span class="val">container</span>
+    <span class="kw">paths</span>:
+      - <span class="file">"/var/lib/docker/containers/*/*.log"</span>
+    <span class="kw">processors</span>:
+      - <span class="kw">add_docker_metadata</span>:
+          <span class="kw">host</span>: <span class="val">"unix:///var/run/docker.sock"</span>
+
+  - <span class="kw">type</span>: <span class="val">log</span>
+    <span class="kw">paths</span>:
+      - <span class="file">/var/log/syslog</span>
+      - <span class="file">/var/log/auth.log</span>
+    <span class="kw">fields</span>:
+      <span class="kw">log_type</span>: <span class="val">syslog</span>
+
+<span class="kw">output.logstash</span>:
+  <span class="kw">hosts</span>: [<span class="val">"logstash:5044"</span>]
+
+<span class="comment"># Alternative: bypass Logstash and write straight to Elasticsearch.
+# Filebeat allows only ONE output, so comment out output.logstash first.
+# output.elasticsearch:
+#   hosts: ["http://elasticsearch:9200"]</span></pre>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head">5b — Logstash filters <span class="tag tag-cyan">logstash.conf</span></div>
+    <div class="card-body">
+      <p>Logstash listens for Beats on <code>5044</code> and JSON lines on <code>5000</code>, then:</p>
+      <ul class="checklist">
+        <li>Tags container events with <code>log_source: docker</code></li>
+        <li>Parses messages that start with <code>{</code> as JSON</li>
+        <li>Groks access logs with <code>COMBINEDAPACHELOG</code></li>
+        <li>Drops empty messages</li>
+      </ul>
+      <pre><span class="kw">filter</span> {
+  <span class="kw">if</span> [log][file][path] =~ <span class="val">"access"</span> {
+    <span class="kw">grok</span> {
+      <span class="kw">match</span> => { <span class="val">"message"</span> => <span class="val">"%{COMBINEDAPACHELOG}"</span> }
+      <span class="kw">tag_on_failure</span> => [<span class="val">"_grok_parse_failure"</span>]
+    }
+  }
+}
+
+<span class="kw">output</span> {
+  <span class="kw">elasticsearch</span> {
+    <span class="kw">hosts</span> => [<span class="val">"http://elasticsearch:9200"</span>]
+    <span class="kw">index</span> => <span class="val">"logstash-%{+YYYY.MM.dd}"</span>
+  }
+}</pre>
+      <p>After editing the pipeline, restart only Logstash:</p>
+      <pre><span class="cmd">docker compose restart logstash</span></pre>
+    </div>
+  </div>
+
+  <!-- STEP 6 -->
+  <div class="section-header">
+    <div class="step-num">6</div>
+    <h2>Send test data</h2>
+  </div>
+
+  <div class="card">
+    <div class="card-head">6a — Push events and find them in Kibana</div>
+    <div class="card-body">
+      <pre><span class="comment"># JSON over TCP into Logstash</span>
+<span class="cmd">echo '{"level":"info","message":"Hello ELK","app":"test"}' | nc localhost 5000</span>
+
+<span class="comment"># Or index a document directly in Elasticsearch</span>
+<span class="cmd">curl -X POST http://localhost:9200/my-index/_doc \
+  -u elastic:$ELASTIC_PASSWORD \
+  -H "Content-Type: application/json" \
+  -d '{"message":"test event"}'</span></pre>
+      <p>In Kibana, create a data view for <code>logstash-*</code> under <strong>Stack Management → Data Views</strong>, then open <strong>Discover</strong>.</p>
+      <div class="callout tip">
+        <div class="callout-icon">✓</div>
+        <div>If "Hello ELK" shows up in Discover, the full Logstash → Elasticsearch → Kibana path works.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- COMMANDS -->
+  <div class="section-header">
+    <div class="step-num amber">$</div>
+    <h2>Useful commands</h2>
+  </div>
+
+  <div class="card">
+    <div class="card-head">Day-to-day</div>
+    <div class="card-body">
+      <pre><span class="comment"># Follow all logs</span>
+<span class="cmd">docker compose logs -f</span>
+
+<span class="comment"># Stop everything, keep data volumes</span>
+<span class="cmd">docker compose down</span>
+
+<span class="comment"># Stop and DELETE all data</span>
+<span class="cmd">docker compose down -v</span>
+
+<span class="comment"># Restart one service</span>
+<span class="cmd">docker compose restart logstash</span></pre>
+      <div class="callout warn">
+        <div class="callout-icon">⚠</div>
+        <div>TLS is disabled inside the Docker network to keep the lab simple. Never expose these ports to the internet.</div>
+      </div>
+    </div>
+  </div>
+
+  <figure>
+    <img src="architecture.png" alt="Diagram: Filebeat to Logstash to Elasticsearch to Kibana inside the elk Docker network" width="341" height="451" loading="lazy">
+    <figcaption>Original architecture sketch (draw.io)</figcaption>
+  </figure>
+
+</main>
+
+<footer>
+  <div>ELK Stack + Filebeat · <a href="../">← All projects</a></div>
+  <div><a href="https://github.com/jkapsalis/ELK-stack-setup-docker">Source on GitHub ↗</a></div>
+</footer>
+
+</body>
+</html>

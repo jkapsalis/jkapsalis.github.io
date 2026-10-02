@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Projects — Ioannis Kapsalis</title>
+<meta name="description" content="Infrastructure lab guides: SaltStack, ELK Stack on Docker, HashiCorp Vault PKI.">
+<link rel="stylesheet" href="../assets/style.css">
+<link rel="stylesheet" href="../assets/nav.css">
+</head>
+<body>
+
+<nav class="site-nav">
+  <div class="site-nav-inner">
+    <a class="site-brand" href="../">jkapsalis<span>.github.io</span></a>
+    <ul class="site-links">
+      <li><a href="../">Home</a></li>
+      <li><a href="../about/">About</a></li>
+      <li><a href="./" aria-current="page">Projects</a></li>
+    </ul>
+  </div>
+</nav>
+
+<header class="page-header">
+  <div class="badge">Projects · 3 guides</div>
+  <h1>Infrastructure <span>labs</span></h1>
+  <p class="lead">Each project is a full walkthrough: topology, commands, configuration and troubleshooting.</p>
+</header>
+
+<main>
+
+  <div class="project-list">
+
+    <article class="project" style="--accent: var(--blue)">
+      <div class="kicker">Configuration management</div>
+      <h3><a href="saltstack/">SaltStack master &amp; minions</a></h3>
+      <p>
+        Install a Salt master on Oracle Linux, connect minion VMs, accept their keys and run
+        remote commands from one place. Groundwork for central package and update policies.
+      </p>
+      <ul class="stack">
+        <li>SaltStack</li>
+        <li>Oracle Linux 9.5</li>
+        <li>firewalld</li>
+        <li>dnf</li>
+      </ul>
+      <div class="links">
+        <a href="saltstack/">Read guide →</a>
+        <a href="https://github.com/jkapsalis/saltstack_learning">Source ↗</a>
+      </div>
+    </article>
+
+    <article class="project" style="--accent: var(--cyan)">
+      <div class="kicker">Logging &amp; observability</div>
+      <h3><a href="elk-stack/">ELK Stack + Filebeat on Docker</a></h3>
+      <p>
+        A single-command Elasticsearch, Logstash, Kibana and Filebeat lab. Filebeat ships Docker
+        container logs and host syslog through a Logstash pipeline into Elasticsearch.
+      </p>
+      <ul class="stack">
+        <li>Elasticsearch 8.13</li>
+        <li>Logstash</li>
+        <li>Kibana</li>
+        <li>Filebeat</li>
+        <li>Docker Compose</li>
+      </ul>
+      <div class="links">
+        <a href="elk-stack/">Read guide →</a>
+        <a href="https://github.com/jkapsalis/ELK-stack-setup-docker">Source ↗</a>
+      </div>
+    </article>
+
+    <article class="project" style="--accent: var(--amber)">
+      <div class="kicker">PKI &amp; security</div>
+      <h3><a href="vault-pki/">Vault PKI CA Manager</a></h3>
+      <p>
+        A local certificate authority on HashiCorp Vault. A PowerShell menu starts Vault in Docker,
+        sets up the PKI engine, and issues, revokes and exports certificates.
+      </p>
+      <ul class="stack">
+        <li>HashiCorp Vault</li>
+        <li>PowerShell</li>
+        <li>OpenSSL</li>
+        <li>Docker</li>
+      </ul>
+      <div class="links">
+        <a href="vault-pki/">Read guide →</a>
+      </div>
+    </article>
+
+  </div>
+
+</main>
+
+<footer>
+  <div>© 2026 Ioannis Kapsalis</div>
+  <div><a href="https://github.com/jkapsalis">github.com/jkapsalis</a></div>
+</footer>
+
+</body>
+</html>
