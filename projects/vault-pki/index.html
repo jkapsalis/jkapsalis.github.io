@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Vault PKI CA Manager — Ioannis Kapsalis</title>
+<title>Vault PKI Interface Manager — Ioannis Kapsalis</title>
 <meta name="description" content="Step-by-step guide: a local certificate authority on HashiCorp Vault, managed with a PowerShell menu.">
 <link rel="stylesheet" href="../../assets/style.css">
 <link rel="stylesheet" href="../../assets/nav.css">
@@ -94,7 +94,7 @@
         <table>
           <tr><th>Tool</th><th>Used for</th></tr>
           <tr><td>Docker Desktop</td><td>Runs the <code>hashicorp/vault</code> container</td></tr>
-          <tr><td>PowerShell 5.1+</td><td>Runs the CA manager script</td></tr>
+          <tr><td>PowerShell 5.1+</td><td>Runs the Vault PKI Interface Manager script</td></tr>
           <tr><td>OpenSSL</td><td>Private keys, CSRs and PFX export</td></tr>
           <tr><td>certutil</td><td>Adds the root CA to the Windows trust store (built in)</td></tr>
         </table>
@@ -254,7 +254,7 @@
   <!-- STEP 5 -->
   <div class="section-header">
     <div class="step-num amber">5</div>
-    <h2>The PowerShell CA manager</h2>
+    <h2>The Vault PKI Interface Manager</h2>
   </div>
 
   <div class="card">
@@ -271,7 +271,7 @@
   <span class="kw">"RoleDomain"</span>: <span class="val">"apps.dev.example.com"</span>,
   <span class="kw">"RoleMaxTtl"</span>: <span class="val">"720h"</span>
 }</pre>
-      <pre><span class="cmd">.\vault-ca-mana.ps1</span></pre>
+      <pre><span class="cmd">.\Vault-PKI-Interface-Manager.ps1</span></pre>
     </div>
   </div>
 
@@ -280,7 +280,7 @@
     <div class="card-body">
       <p>After start-up, Vault is running, the token is set for the session and the PKI engine is ready:</p>
       <pre><span class="val">============================================================
-                 LOCAL VAULT CA MANAGER
+                VAULT PKI INTERFACE MANAGER
 ============================================================</span>
  Address : http://localhost:8200
  PKI     : pki
@@ -339,7 +339,7 @@
 </main>
 
 <footer>
-  <div>Vault PKI CA Manager · <a href="../">← All projects</a></div>
+  <div>Vault PKI Interface Manager · <a href="../">← All projects</a></div>
   <div>HashiCorp Vault · <a href="https://developer.hashicorp.com/vault/docs/secrets/pki">PKI docs ↗</a></div>
 </footer>
 
